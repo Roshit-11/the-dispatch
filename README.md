@@ -130,19 +130,66 @@ Check `cache/seen.json` — URLs stay in there for 7 days to prevent re-summariz
 
 ---
 
-## Notes on the news sites
+## Deploying to Render.com (10 minutes, no credit card)
 
-All 4 sites are being read respectfully: once every 10 minutes, with a standard browser User-Agent, only reading publicly accessible article pages. Every article card in the UI links back to the original source. This is standard aggregator behavior.
+### Step 1: Push to GitHub
 
-If `ekantipur.com` starts blocking your IP (they have anti-scraping language in their ToS), remove them from `NEWS_SOURCES` in `server.js`.
+1. Create a **new private repository** on [github.com](https://github.com/new)
+   - Name: `news-summarizer`
+   - Do NOT initialize with README (you already have one)
 
----
+2. Push your code:
+   ```bash
+   git remote add origin https://github.com/YOUR_USERNAME/news-summarizer.git
+   git branch -M main
+   git push -u origin main
+   ```
 
-## If you want to deploy this later
+### Step 2: Deploy on Render
 
-Right now everything runs locally with keys in `.env`. If you eventually want to host this on the internet, you'll need:
-- A platform that runs Node (Render, Railway, Fly.io, or a VPS)
-- Environment variables set on that platform instead of `.env`
-- Persistent storage for `cache/` (most platforms offer this as a volume)
+1. Go to [render.com](https://render.com) and sign up (free tier is fine)
+2. Click **"New +"** → **"Web Service"**
+3. Select **"Deploy an existing Git repository"**
+4. Paste your GitHub repo URL and authorize Render to access it
+5. Fill in the form:
+   - **Name**: `news-summarizer`
+   - **Environment**: `Node`
+   - **Build command**: `npm install`
+   - **Start command**: `npm start`
+   - **Region**: pick closest to you
+   - **Plan**: Free (sufficient for this app)
 
-But for development and personal use, `npm start` on your laptop is perfect.
+6. Click **"Create Web Service"** — Render will deploy automatically
+
+### Step 3: Add environment variables
+
+After deployment starts:
+
+1. In Render dashboard, go to your web service
+2. Click **"Environment"** on the left
+3. Add these variables (copy from your `.env` file):
+   - `RAPIDAPI_KEY`
+   - `OPENROUTER_API_KEY`
+   - `MYMEMORY_EMAIL`
+   - `PORT=3000`
+   - `SCRAPE_INTERVAL_MINUTES=10`
+
+4. Click "Save Changes" — service will redeploy
+
+Your app is now live at `https://news-summarizer-xxx.onrender.com` ✓
+
+### Step 4: Keep it alive with UptimeRobot (prevents spinning down)
+
+The free tier on Render spins down services after 15 minutes of no traffic. This breaks the 10-minute news scrape cycle. Fix it:
+
+1. Go to [uptimerobot.com](https://uptimerobot.com) and sign up (free)
+2. Click **"Add New Monitor"**
+3. Set up:
+   - **Monitor Type**: HTTP(s)
+   - **URL**: `https://news-summarizer-xxx.onrender.com/api/health`
+   - **Monitoring Interval**: 5 minutes
+   - Click **"Create Monitor"**
+
+Now UptimeRobot pings your service every 5 minutes, keeping it warm. The scrape cycle runs without interruption.
+
+
