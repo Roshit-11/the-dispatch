@@ -1,0 +1,1346 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>The Dispatch — News Summarizer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,400;9..144,500;9..144,600;9..144,700;9..144,900&family=JetBrains+Mono:wght@400;500&family=Inter+Tight:wght@400;500;600&family=Noto+Sans+Devanagari:wght@400;500;600&family=Noto+Sans+Bengali:wght@400;500;600&family=Noto+Sans+Tamil:wght@400;500;600&family=Noto+Nastaliq+Urdu:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --cream: #f4efe6;
+    --cream-deep: #ebe3d3;
+    --ink: #1a1613;
+    --ink-soft: #3d342c;
+    --rust: #b8441f;
+    --rust-deep: #8a2f14;
+    --gold: #c49a3f;
+    --muted: #7a6e61;
+    --paper-shadow: 0 2px 0 rgba(26, 22, 19, 0.04), 0 20px 40px -20px rgba(26, 22, 19, 0.15);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body {
+    background: var(--cream);
+    color: var(--ink);
+    font-family: 'Fraunces', Georgia, serif;
+    font-feature-settings: "ss01", "ss02", "kern";
+    -webkit-font-smoothing: antialiased;
+    min-height: 100vh;
+  }
+
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      radial-gradient(circle at 20% 30%, rgba(184, 68, 31, 0.03) 0%, transparent 40%),
+      radial-gradient(circle at 80% 70%, rgba(196, 154, 63, 0.04) 0%, transparent 50%);
+    pointer-events: none;
+    z-index: 0;
+  }
+  body::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.1 0 0 0 0 0.08 0 0 0 0 0.07 0 0 0 0.035 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    pointer-events: none;
+    opacity: 0.5;
+    z-index: 1;
+    mix-blend-mode: multiply;
+  }
+
+  .container {
+    position: relative;
+    z-index: 2;
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 2.5rem 2rem 4rem;
+  }
+
+  .masthead {
+    border-top: 3px solid var(--ink);
+    border-bottom: 1px solid var(--ink);
+    padding: 0.6rem 0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.72rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+  }
+  .masthead .dot {
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    background: var(--rust);
+    border-radius: 50%;
+    margin: 0 0.6rem;
+    animation: pulse 2s ease-in-out infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.4; transform: scale(0.8); }
+  }
+
+  .title-block {
+    text-align: center;
+    padding: 3.5rem 0 2rem;
+    border-bottom: 1px solid var(--ink);
+  }
+  .title-block .eyebrow {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.68rem;
+    letter-spacing: 0.3em;
+    text-transform: uppercase;
+    color: var(--rust);
+    margin-bottom: 1rem;
+    display: block;
+  }
+  .title-block h1 {
+    font-family: 'Fraunces', serif;
+    font-weight: 900;
+    font-size: clamp(3.5rem, 9vw, 7rem);
+    line-height: 0.92;
+    letter-spacing: -0.04em;
+    font-variation-settings: "opsz" 144, "SOFT" 0;
+    margin-bottom: 1rem;
+  }
+  .title-block h1 em {
+    font-style: italic;
+    font-weight: 300;
+    color: var(--rust-deep);
+    font-variation-settings: "opsz" 144, "SOFT" 100;
+  }
+  .title-block .subtitle {
+    font-family: 'Fraunces', serif;
+    font-weight: 400;
+    font-style: italic;
+    font-size: 1.15rem;
+    color: var(--ink-soft);
+    max-width: 520px;
+    margin: 0 auto;
+    line-height: 1.5;
+  }
+
+  .date-strip {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.7rem 0;
+    border-bottom: 3px double var(--ink);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.7rem;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+    margin-bottom: 3rem;
+  }
+
+  .input-section {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 3rem;
+    margin-bottom: 3rem;
+    align-items: start;
+  }
+  @media (max-width: 860px) {
+    .input-section { grid-template-columns: 1fr; gap: 2rem; }
+  }
+
+  .input-section .left h2 {
+    font-family: 'Fraunces', serif;
+    font-weight: 500;
+    font-style: italic;
+    font-size: 2.2rem;
+    line-height: 1.1;
+    letter-spacing: -0.02em;
+    margin-bottom: 1rem;
+  }
+  .input-section .left h2 span {
+    background: linear-gradient(180deg, transparent 62%, rgba(196, 154, 63, 0.35) 62%, rgba(196, 154, 63, 0.35) 92%, transparent 92%);
+    padding: 0 0.15em;
+  }
+  .input-section .left p {
+    font-size: 1rem;
+    line-height: 1.6;
+    color: var(--ink-soft);
+    max-width: 400px;
+  }
+  .input-section .left .pill-row {
+    margin-top: 1.25rem;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    align-items: center;
+  }
+  .pill {
+    display: inline-block;
+    padding: 0.3rem 0.7rem;
+    border: 1px solid var(--ink);
+    background: var(--cream-deep);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.62rem;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+  }
+  .pill.accent { background: var(--rust); color: var(--cream); border-color: var(--rust); }
+  .pill.devanagari { font-family: 'Noto Sans Devanagari', sans-serif; font-size: 0.85rem; letter-spacing: 0; text-transform: none; }
+  .pill.bengali { font-family: 'Noto Sans Bengali', sans-serif; font-size: 0.85rem; letter-spacing: 0; text-transform: none; }
+  .pill.tamil { font-family: 'Noto Sans Tamil', sans-serif; font-size: 0.85rem; letter-spacing: 0; text-transform: none; }
+  .pill.arabic { font-family: 'Noto Nastaliq Urdu', sans-serif; font-size: 0.9rem; letter-spacing: 0; text-transform: none; direction: rtl; }
+
+  .form-card {
+    background: #fbf7ee;
+    border: 1px solid var(--ink);
+    padding: 1.75rem;
+    position: relative;
+    box-shadow: var(--paper-shadow);
+  }
+  .form-card::before {
+    content: '';
+    position: absolute;
+    top: -1px; left: -1px; right: -1px; bottom: -1px;
+    border: 1px solid var(--ink);
+    transform: translate(6px, 6px);
+    z-index: -1;
+    background: var(--rust);
+  }
+
+  .form-card label {
+    display: block;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.7rem;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+    margin-bottom: 0.6rem;
+  }
+  .form-card input[type="url"] {
+    width: 100%;
+    padding: 0.85rem 1rem;
+    border: 1px solid var(--ink);
+    background: var(--cream);
+    font-family: 'Inter Tight', sans-serif;
+    font-size: 0.95rem;
+    color: var(--ink);
+    outline: none;
+    transition: background 0.2s, box-shadow 0.2s;
+  }
+  .form-card input[type="url"]:focus {
+    background: #fff;
+    box-shadow: inset 0 0 0 2px var(--rust);
+  }
+  .form-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+    margin-top: 1rem;
+  }
+  .form-card select {
+    width: 100%;
+    padding: 0.7rem 0.8rem;
+    border: 1px solid var(--ink);
+    background: var(--cream);
+    font-family: 'Inter Tight', sans-serif;
+    font-size: 0.9rem;
+    color: var(--ink);
+    outline: none;
+    cursor: pointer;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg width='10' height='6' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%231a1613' fill='none' stroke-width='1.5'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.8rem center;
+    padding-right: 2rem;
+  }
+
+  .length-toggle { margin-top: 1rem; }
+  .length-toggle .seg {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    border: 1px solid var(--ink);
+    background: var(--cream);
+  }
+  .length-toggle .seg button {
+    padding: 0.7rem 0.5rem;
+    background: transparent;
+    border: none;
+    border-right: 1px solid var(--ink);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.7rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .length-toggle .seg button:last-child { border-right: none; }
+  .length-toggle .seg button:hover { background: var(--cream-deep); }
+  .length-toggle .seg button.active {
+    background: var(--ink);
+    color: var(--cream);
+  }
+  .length-toggle .seg button .num {
+    display: block;
+    font-family: 'Fraunces', serif;
+    font-size: 1.15rem;
+    font-weight: 600;
+    letter-spacing: 0;
+    margin-bottom: 0.15rem;
+    text-transform: none;
+    line-height: 1;
+  }
+  .length-toggle .seg button .lbl { font-size: 0.6rem; }
+
+  .submit-btn {
+    width: 100%;
+    margin-top: 1.25rem;
+    padding: 1rem 1.5rem;
+    background: var(--ink);
+    color: var(--cream);
+    border: 1px solid var(--ink);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.78rem;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .submit-btn:hover { background: var(--rust); color: var(--cream); }
+  .submit-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .submit-btn .arrow { display: inline-block; margin-left: 0.5rem; transition: transform 0.2s; }
+  .submit-btn:hover .arrow { transform: translateX(4px); }
+
+  .examples {
+    margin-top: 1rem;
+    font-family: 'Inter Tight', sans-serif;
+    font-size: 0.8rem;
+    color: var(--muted);
+  }
+  .examples strong {
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 500;
+    font-size: 0.65rem;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+    display: block;
+    margin-bottom: 0.4rem;
+  }
+  .examples button {
+    background: none;
+    border: none;
+    color: var(--rust-deep);
+    text-decoration: underline;
+    text-decoration-style: dotted;
+    text-underline-offset: 3px;
+    font-family: inherit;
+    font-size: inherit;
+    cursor: pointer;
+    padding: 0.1rem 0;
+    margin-right: 0.8rem;
+  }
+  .examples button:hover { color: var(--ink); }
+
+  .article {
+    display: none;
+    margin-top: 2rem;
+    animation: fadeUp 0.6s ease-out;
+  }
+  .article.visible { display: block; }
+
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .article-head {
+    border-top: 3px double var(--ink);
+    padding-top: 2rem;
+    margin-bottom: 2.5rem;
+  }
+  .article-head .kicker {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.7rem;
+    letter-spacing: 0.25em;
+    text-transform: uppercase;
+    color: var(--rust);
+    margin-bottom: 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    flex-wrap: wrap;
+  }
+  .article-head .kicker::before {
+    content: '';
+    width: 30px;
+    height: 1px;
+    background: var(--rust);
+  }
+  .article-head .kicker .badge {
+    display: inline-block;
+    padding: 0.2rem 0.55rem;
+    background: var(--ink);
+    color: var(--cream);
+    font-size: 0.6rem;
+    letter-spacing: 0.15em;
+  }
+  .article-head .kicker .badge.rust { background: var(--rust); }
+  .article-head h2 {
+    font-family: 'Fraunces', serif;
+    font-weight: 600;
+    font-size: clamp(2rem, 5vw, 3.2rem);
+    line-height: 1.05;
+    letter-spacing: -0.025em;
+    color: var(--ink);
+    margin-bottom: 1rem;
+    font-variation-settings: "opsz" 144;
+  }
+  .article-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1.5rem;
+    align-items: center;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.72rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+    padding-top: 1rem;
+    border-top: 1px solid var(--ink);
+  }
+  .article-meta .source a {
+    color: var(--rust-deep);
+    text-decoration: none;
+    border-bottom: 1px solid var(--rust-deep);
+  }
+  .article-meta .source a:hover { color: var(--ink); border-color: var(--ink); }
+
+  .article-body {
+    display: grid;
+    grid-template-columns: 1fr 280px;
+    gap: 3rem;
+    align-items: start;
+  }
+  @media (max-width: 860px) {
+    .article-body { grid-template-columns: 1fr; }
+  }
+
+  .summary-content {
+    font-family: 'Fraunces', serif;
+    font-size: 1.15rem;
+    line-height: 1.7;
+    color: var(--ink);
+    font-variation-settings: "opsz" 14;
+  }
+
+  .summary-content.script-devanagari,
+  .summary-content.script-devanagari .lead,
+  .summary-content.script-devanagari .bullet-group li {
+    font-family: 'Noto Sans Devanagari', 'Fraunces', serif;
+    line-height: 1.85;
+  }
+  .summary-content.script-bengali,
+  .summary-content.script-bengali .lead,
+  .summary-content.script-bengali .bullet-group li {
+    font-family: 'Noto Sans Bengali', 'Fraunces', serif;
+    line-height: 1.85;
+  }
+  .summary-content.script-tamil,
+  .summary-content.script-tamil .lead,
+  .summary-content.script-tamil .bullet-group li {
+    font-family: 'Noto Sans Tamil', 'Fraunces', serif;
+    line-height: 1.9;
+  }
+  .summary-content.script-arabic,
+  .summary-content.script-arabic .lead,
+  .summary-content.script-arabic .bullet-group li {
+    font-family: 'Noto Nastaliq Urdu', 'Fraunces', serif;
+    direction: rtl;
+    text-align: right;
+    line-height: 2.3;
+  }
+  .summary-content.script-arabic .bullet-group {
+    border-left: none;
+    border-right: 3px solid var(--rust);
+    padding-left: 0;
+    padding-right: 1.5rem;
+  }
+  .summary-content.script-arabic .bullet-group li {
+    padding-left: 0;
+    padding-right: 2rem;
+  }
+  .summary-content.script-arabic .bullet-group li::before {
+    left: auto;
+    right: 0;
+  }
+
+  .summary-content.script-devanagari .lead::first-letter,
+  .summary-content.script-bengali .lead::first-letter,
+  .summary-content.script-tamil .lead::first-letter,
+  .summary-content.script-arabic .lead::first-letter {
+    float: none;
+    font-size: inherit;
+    margin: 0;
+    color: inherit;
+    font-weight: inherit;
+  }
+
+  .summary-content .lead {
+    font-size: 1.35rem;
+    line-height: 1.55;
+    margin-bottom: 1.5rem;
+    color: var(--ink);
+    font-weight: 400;
+  }
+  .summary-content .lead::first-letter {
+    font-family: 'Fraunces', serif;
+    font-weight: 900;
+    font-size: 5.5rem;
+    line-height: 0.85;
+    float: left;
+    margin: 0.3rem 0.6rem -0.1rem 0;
+    color: var(--rust-deep);
+    font-variation-settings: "opsz" 144;
+  }
+
+  .summary-content .bullet-group {
+    list-style: none;
+    margin: 2rem 0;
+    padding: 0;
+    border-left: 3px solid var(--rust);
+    padding-left: 1.5rem;
+    counter-reset: item;
+  }
+  .summary-content .bullet-group li {
+    position: relative;
+    margin-bottom: 1.25rem;
+    padding-left: 2rem;
+    font-size: 1.05rem;
+    line-height: 1.65;
+  }
+  .summary-content .bullet-group li::before {
+    content: counter(item, decimal-leading-zero);
+    counter-increment: item;
+    position: absolute;
+    left: 0;
+    top: 0.15rem;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: var(--rust);
+    letter-spacing: 0.05em;
+  }
+  .summary-content p { margin-bottom: 1.25rem; }
+
+  .translation-notice {
+    margin: 1.5rem 0;
+    padding: 0.9rem 1.1rem;
+    background: var(--cream-deep);
+    border-left: 3px solid var(--gold);
+    font-family: 'Inter Tight', sans-serif;
+    font-size: 0.82rem;
+    color: var(--ink-soft);
+    line-height: 1.5;
+  }
+  .translation-notice strong {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.65rem;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--gold);
+    display: block;
+    margin-bottom: 0.3rem;
+    font-weight: 500;
+  }
+  .translation-notice a {
+    color: var(--rust-deep);
+    cursor: pointer;
+    text-decoration: underline;
+    text-decoration-style: dotted;
+    text-underline-offset: 2px;
+  }
+
+  .sidebar { position: sticky; top: 2rem; }
+  .sidebar-card {
+    background: var(--ink);
+    color: var(--cream);
+    padding: 1.75rem 1.5rem;
+    margin-bottom: 1.5rem;
+  }
+  .sidebar-card h3 {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.7rem;
+    letter-spacing: 0.25em;
+    text-transform: uppercase;
+    color: var(--gold);
+    margin-bottom: 1.25rem;
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid rgba(244, 239, 230, 0.2);
+  }
+  .stat { margin-bottom: 1.25rem; }
+  .stat:last-child { margin-bottom: 0; }
+  .stat .label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.62rem;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: rgba(244, 239, 230, 0.55);
+    margin-bottom: 0.3rem;
+  }
+  .stat .value {
+    font-family: 'Fraunces', serif;
+    font-size: 1.8rem;
+    font-weight: 600;
+    line-height: 1;
+    color: var(--cream);
+    font-variation-settings: "opsz" 144;
+  }
+  .stat .value small {
+    font-size: 0.9rem;
+    color: rgba(244, 239, 230, 0.6);
+    font-weight: 400;
+    margin-left: 0.2rem;
+  }
+
+  .actions-card {
+    border: 1px solid var(--ink);
+    padding: 1.25rem;
+    background: var(--cream-deep);
+  }
+  .actions-card h3 {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.68rem;
+    letter-spacing: 0.25em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+    margin-bottom: 1rem;
+  }
+  .actions-card button {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
+    padding: 0.7rem 0.9rem;
+    background: transparent;
+    border: 1px solid var(--ink);
+    color: var(--ink);
+    font-family: 'Inter Tight', sans-serif;
+    font-size: 0.85rem;
+    text-align: left;
+    cursor: pointer;
+    margin-bottom: 0.5rem;
+    transition: all 0.15s;
+  }
+  .actions-card button:hover { background: var(--ink); color: var(--cream); }
+  .actions-card button:last-child { margin-bottom: 0; }
+
+  .loader {
+    display: none;
+    margin-top: 2rem;
+    padding: 3rem 2rem;
+    border-top: 3px double var(--ink);
+    text-align: center;
+  }
+  .loader.visible { display: block; }
+  .loader .spinner {
+    display: inline-block;
+    width: 40px;
+    height: 40px;
+    border: 2px solid var(--cream-deep);
+    border-top-color: var(--rust);
+    border-radius: 50%;
+    animation: spin 0.9s linear infinite;
+    margin-bottom: 1.25rem;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .loader .msg {
+    font-family: 'Fraunces', serif;
+    font-style: italic;
+    font-size: 1.1rem;
+    color: var(--ink-soft);
+  }
+  .loader .sub {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.7rem;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-top: 0.6rem;
+  }
+  .loader-stages {
+    margin-top: 1.5rem;
+    display: flex;
+    justify-content: center;
+    gap: 0.75rem;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.62rem;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--muted);
+    flex-wrap: wrap;
+  }
+  .loader-stages .stage {
+    padding: 0.25rem 0.6rem;
+    border: 1px solid var(--cream-deep);
+    transition: all 0.3s;
+  }
+  .loader-stages .stage.active {
+    border-color: var(--rust);
+    color: var(--rust);
+    background: rgba(184, 68, 31, 0.06);
+  }
+  .loader-stages .stage.done {
+    border-color: var(--ink);
+    color: var(--ink);
+  }
+
+  .error {
+    display: none;
+    margin-top: 2rem;
+    padding: 1.5rem;
+    border: 1px solid var(--rust-deep);
+    background: rgba(184, 68, 31, 0.08);
+  }
+  .error.visible { display: block; }
+  .error strong {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.72rem;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--rust-deep);
+    display: block;
+    margin-bottom: 0.5rem;
+  }
+  .error p {
+    font-family: 'Fraunces', serif;
+    font-size: 1rem;
+    color: var(--ink);
+  }
+
+  footer {
+    margin-top: 5rem;
+    padding-top: 2rem;
+    border-top: 1px solid var(--ink);
+    display: flex;
+    justify-content: space-between;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.68rem;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+    gap: 1rem;
+    flex-wrap: wrap;
+  }
+
+  .toast {
+    position: fixed;
+    bottom: 2rem;
+    left: 50%;
+    transform: translateX(-50%) translateY(120%);
+    background: var(--ink);
+    color: var(--cream);
+    padding: 0.9rem 1.5rem;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.75rem;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    z-index: 100;
+  }
+  .toast.visible { transform: translateX(-50%) translateY(0); }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <div class="masthead">
+    <span>Volume I · No. 02</span>
+    <nav style="display: flex; gap: 1.25rem;">
+      <a href="index.html" style="color: var(--rust); text-decoration: none; border-bottom: 1px solid var(--rust); padding-bottom: 2px;">Summarize a URL</a>
+      <a href="news.html" style="color: var(--ink-soft); text-decoration: none; border-bottom: 1px solid transparent; padding-bottom: 2px;" onmouseover="this.style.borderColor='var(--ink)'; this.style.color='var(--ink)';" onmouseout="this.style.borderColor='transparent'; this.style.color='var(--ink-soft)';">Nepali News Feed</a>
+    </nav>
+    <span><span class="dot"></span>Live Desk Active</span>
+    <span id="today-date">—</span>
+  </div>
+
+  <header class="title-block">
+    <span class="eyebrow">✦ World News · Intelligent Summarization ✦</span>
+    <h1>The <em>Dispatch</em></h1>
+    <p class="subtitle">A reader's companion for the world's news — distilled, considered, and served with care.</p>
+  </header>
+
+  <div class="date-strip">
+    <span>Est. 2026</span>
+    <span>Powered by RapidAPI · MyMemory Translation</span>
+    <span>Weather: Partly Informed</span>
+  </div>
+
+  <section class="input-section">
+    <div class="left">
+      <h2>Paste a link. <br/><span>Read the essence.</span></h2>
+      <p>Drop any news article URL below and we'll return a clean, considered summary — no filler, no fluff. Perfect for staying informed when time is short.</p>
+      <div class="pill-row">
+        <span class="pill accent">New</span>
+        <span class="pill devanagari">नेपाली</span>
+        <span class="pill bengali">বাংলা</span>
+        <span class="pill tamil">தமிழ்</span>
+        <span class="pill arabic">اردو</span>
+        <span class="pill devanagari">मराठी</span>
+      </div>
+    </div>
+    <div class="form-card">
+      <label for="url-input">News Article URL</label>
+      <input type="url" id="url-input" placeholder="https://example.com/article" />
+      <div class="form-row">
+        <div>
+          <label for="lang-select">Language</label>
+          <select id="lang-select">
+            <optgroup label="Native (summarizer)">
+              <option value="en">English</option>
+              <option value="es">Español</option>
+              <option value="fr">Français</option>
+              <option value="de">Deutsch</option>
+              <option value="it">Italiano</option>
+              <option value="pt">Português</option>
+              <option value="ja">日本語</option>
+              <option value="zh">中文</option>
+              <option value="hi">हिन्दी (Hindi)</option>
+              <option value="ar">العربية</option>
+            </optgroup>
+            <optgroup label="Via translation">
+              <option value="ne">नेपाली (Nepali)</option>
+              <option value="bn">বাংলা (Bengali)</option>
+              <option value="ta">தமிழ் (Tamil)</option>
+              <option value="ur">اردو (Urdu)</option>
+              <option value="mr">मराठी (Marathi)</option>
+              <option value="te">తెలుగు (Telugu)</option>
+              <option value="gu">ગુજરાતી (Gujarati)</option>
+              <option value="pa">ਪੰਜਾਬੀ (Punjabi)</option>
+            </optgroup>
+          </select>
+        </div>
+        <div>
+          <label for="engine-select">Engine</label>
+          <select id="engine-select">
+            <option value="2">Engine 2 (Default)</option>
+            <option value="1">Engine 1</option>
+            <option value="0">Engine 0</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="length-toggle">
+        <label>Summary Length</label>
+        <div class="seg" id="length-seg">
+          <button type="button" data-length="1"><span class="num">TL;DR</span><span class="lbl">Shortest</span></button>
+          <button type="button" data-length="3" class="active"><span class="num">Standard</span><span class="lbl">Balanced</span></button>
+          <button type="button" data-length="5"><span class="num">Detailed</span><span class="lbl">Longest</span></button>
+        </div>
+      </div>
+
+      <button class="submit-btn" id="submit-btn">
+        Summarize Article <span class="arrow">→</span>
+      </button>
+      <div class="examples">
+        <strong>Try an example</strong>
+        <button data-url="https://time.com/6266679/musk-ai-open-letter/">Musk AI open letter</button>
+        <button data-url="https://www.bbc.com/news/world">BBC World</button>
+      </div>
+    </div>
+  </section>
+
+  <div class="loader" id="loader">
+    <div class="spinner"></div>
+    <div class="msg" id="loader-msg">Fetching the article…</div>
+    <div class="sub">Please hold — the press is running</div>
+    <div class="loader-stages" id="loader-stages">
+      <span class="stage" data-stage="fetch">1 · Fetch</span>
+      <span class="stage" data-stage="summarize">2 · Summarize</span>
+      <span class="stage" data-stage="translate">3 · Translate</span>
+    </div>
+  </div>
+
+  <div class="error" id="error">
+    <strong>Something went wrong</strong>
+    <p id="error-msg">Unable to summarize this article.</p>
+  </div>
+
+  <article class="article" id="article">
+    <div class="article-head">
+      <div class="kicker">
+        <span>Summary · Freshly Printed</span>
+        <span class="badge" id="length-badge">Standard</span>
+        <span class="badge rust" id="lang-badge">EN</span>
+      </div>
+      <h2 id="article-title">—</h2>
+      <div class="article-meta">
+        <span class="source">Source: <a id="article-source" href="#" target="_blank" rel="noopener">—</a></span>
+        <span>Generated: <span id="article-time">—</span></span>
+        <span>Engine: <span id="article-engine">—</span></span>
+      </div>
+    </div>
+
+    <div class="article-body">
+      <div>
+        <div class="summary-content" id="summary-content"></div>
+        <div class="translation-notice" id="translation-notice" style="display: none;">
+          <strong>Translation Notice</strong>
+          Summary generated in English, then translated via MyMemory into <span id="translation-target">—</span>. Translations are machine-generated and may lose nuance. <a id="view-original">View original English</a>
+        </div>
+      </div>
+      <aside class="sidebar">
+        <div class="sidebar-card">
+          <h3>At a Glance</h3>
+          <div class="stat">
+            <div class="label">Key Points</div>
+            <div class="value" id="stat-points">0</div>
+          </div>
+          <div class="stat">
+            <div class="label">Est. Read Time</div>
+            <div class="value" id="stat-time">0<small>min</small></div>
+          </div>
+          <div class="stat">
+            <div class="label">Word Count</div>
+            <div class="value" id="stat-words">0</div>
+          </div>
+          <div class="stat">
+            <div class="label">Language</div>
+            <div class="value" id="stat-lang" style="font-size: 1.1rem; text-transform: uppercase; letter-spacing: 0.1em;">EN</div>
+          </div>
+        </div>
+        <div class="actions-card">
+          <h3>Actions</h3>
+          <button id="copy-btn">Copy Summary <span>⎘</span></button>
+          <button id="open-btn">Open Original <span>↗</span></button>
+          <button id="new-btn">New Summary <span>+</span></button>
+        </div>
+      </aside>
+    </div>
+  </article>
+
+  <footer>
+    <span>The Dispatch © 2026</span>
+    <span>Summaries · RapidAPI · Translations · MyMemory</span>
+    <span>Crafted with care</span>
+  </footer>
+
+</div>
+
+<div class="toast" id="toast">Copied to clipboard</div>
+
+<script>
+  // ============================================================
+  // CONFIG
+  // ============================================================
+  // Frontend and backend are served from the same Node server,
+  // so we just use relative /api paths — no full URL needed.
+  const WORKER_URL = '/api';
+
+  // Languages the summarizer API handles natively.
+  const NATIVE_LANGS = new Set(['en','es','fr','de','it','pt','ja','zh','hi','ar']);
+
+  // Target language → script class for font + RTL handling.
+  const SCRIPT_MAP = {
+    ne: 'devanagari', hi: 'devanagari', mr: 'devanagari',
+    gu: 'devanagari', pa: 'devanagari',
+    bn: 'bengali',
+    ta: 'tamil', te: 'tamil',
+    ur: 'arabic', ar: 'arabic'
+  };
+
+  const LANG_NAMES = {
+    en: 'English', es: 'Spanish', fr: 'French', de: 'German', it: 'Italian',
+    pt: 'Portuguese', ja: 'Japanese', zh: 'Chinese', hi: 'Hindi', ar: 'Arabic',
+    ne: 'Nepali', bn: 'Bengali', ta: 'Tamil', ur: 'Urdu', mr: 'Marathi',
+    te: 'Telugu', gu: 'Gujarati', pa: 'Punjabi'
+  };
+
+  // ============================================================
+  // SETUP
+  // ============================================================
+  const today = new Date();
+  const months = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  const days = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+  document.getElementById('today-date').textContent =
+    `${days[today.getDay()]} · ${months[today.getMonth()]} ${today.getDate()}, ${today.getFullYear()}`;
+
+  const $ = (id) => document.getElementById(id);
+  const urlInput = $('url-input');
+  const langSelect = $('lang-select');
+  const engineSelect = $('engine-select');
+  const submitBtn = $('submit-btn');
+  const loader = $('loader');
+  const loaderMsg = $('loader-msg');
+  const errorBox = $('error');
+  const errorMsg = $('error-msg');
+  const article = $('article');
+  const toast = $('toast');
+
+  // Length toggle
+  let currentLength = 3;
+  document.querySelectorAll('#length-seg button').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('#length-seg button').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      currentLength = parseInt(btn.dataset.length, 10);
+    });
+  });
+
+  // Example buttons
+  document.querySelectorAll('.examples button').forEach(btn => {
+    btn.addEventListener('click', () => {
+      urlInput.value = btn.dataset.url;
+      urlInput.focus();
+    });
+  });
+
+  // ============================================================
+  // LOADER / ERROR
+  // ============================================================
+  const loaderMessages = [
+    'Fetching the article…',
+    'Distilling the key points…',
+    'Setting the type…',
+    'Proofreading the copy…',
+    'Almost ready to print…'
+  ];
+  let loaderInterval = null;
+
+  function setStage(stage, status) {
+    const el = document.querySelector(`.stage[data-stage="${stage}"]`);
+    if (!el) return;
+    el.classList.remove('active', 'done');
+    if (status) el.classList.add(status);
+  }
+
+  function resetStages(includeTranslate) {
+    document.querySelectorAll('.stage').forEach(s => s.classList.remove('active', 'done'));
+    const translateStage = document.querySelector('.stage[data-stage="translate"]');
+    if (translateStage) translateStage.style.display = includeTranslate ? '' : 'none';
+  }
+
+  function startLoader(includeTranslate) {
+    loader.classList.add('visible');
+    errorBox.classList.remove('visible');
+    article.classList.remove('visible');
+    resetStages(includeTranslate);
+    setStage('fetch', 'active');
+    let i = 0;
+    loaderMsg.textContent = loaderMessages[0];
+    loaderInterval = setInterval(() => {
+      i = (i + 1) % loaderMessages.length;
+      loaderMsg.textContent = loaderMessages[i];
+    }, 1800);
+  }
+
+  function stopLoader() {
+    loader.classList.remove('visible');
+    if (loaderInterval) { clearInterval(loaderInterval); loaderInterval = null; }
+  }
+
+  function showError(message) {
+    stopLoader();
+    errorMsg.textContent = message;
+    errorBox.classList.add('visible');
+  }
+
+  function showToast(msg) {
+    toast.textContent = msg;
+    toast.classList.add('visible');
+    setTimeout(() => toast.classList.remove('visible'), 2200);
+  }
+
+  // ============================================================
+  // UTILITIES
+  // ============================================================
+  function titleFromUrl(url) {
+    try {
+      const u = new URL(url);
+      const segs = u.pathname.split('/').filter(Boolean);
+      const last = segs[segs.length - 1] || segs[segs.length - 2] || u.hostname;
+      return last
+        .replace(/\.(html?|php|aspx?)$/i, '')
+        .replace(/[-_]+/g, ' ')
+        .replace(/\b\w/g, c => c.toUpperCase())
+        .slice(0, 120);
+    } catch {
+      return 'News Article';
+    }
+  }
+
+  function domainFromUrl(url) {
+    try { return new URL(url).hostname.replace(/^www\./, ''); }
+    catch { return url; }
+  }
+
+  function countWords(text) {
+    return text.trim().split(/\s+/).filter(Boolean).length;
+  }
+
+  // ============================================================
+  // TRANSLATION (MyMemory)
+  // Free endpoint: https://api.mymemory.translated.net/get
+  //   q=<text>&langpair=en|ne
+  // ~500 char sweet spot per request; chunk on sentence boundaries.
+  // ============================================================
+  function chunkForTranslation(text, maxLen = 480) {
+    const lines = text.split('\n');
+    const chunks = [];
+
+    for (const line of lines) {
+      if (line.length === 0) { chunks.push(''); continue; }
+      if (line.length <= maxLen) { chunks.push(line); continue; }
+
+      const sentences = line.match(/[^.!?।]+[.!?।]+|\S+/g) || [line];
+      let buf = '';
+      for (const s of sentences) {
+        if ((buf + ' ' + s).length > maxLen && buf) {
+          chunks.push(buf.trim());
+          buf = s;
+        } else {
+          buf = buf ? buf + ' ' + s : s;
+        }
+      }
+      if (buf) chunks.push(buf.trim());
+    }
+    return chunks;
+  }
+
+  async function translateChunk(text, fromLang, toLang) {
+    if (!text.trim()) return text;
+    const url = `${WORKER_URL}/translate?q=${encodeURIComponent(text)}&langpair=${fromLang}|${toLang}`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`Translation failed (${res.status})`);
+    const data = await res.json();
+    const status = data.responseStatus;
+    if (status !== 200 && status !== '200') {
+      throw new Error(data.responseDetails || 'Translation service error');
+    }
+    return data.responseData?.translatedText || text;
+  }
+
+  async function translateText(text, fromLang, toLang) {
+    const chunks = chunkForTranslation(text);
+    const translated = [];
+    for (const chunk of chunks) {
+      if (!chunk.trim()) { translated.push(''); continue; }
+      const out = await translateChunk(chunk, fromLang, toLang);
+      translated.push(out);
+      // Gentle pacing to avoid rate limits
+      await new Promise(r => setTimeout(r, 120));
+    }
+    return translated.join('\n');
+  }
+
+  // ============================================================
+  // RENDERING
+  // ============================================================
+  function renderSummary(text, scriptClass) {
+    const container = $('summary-content');
+    container.innerHTML = '';
+    container.className = 'summary-content' + (scriptClass ? ' script-' + scriptClass : '');
+
+    const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+    const bulletRegex = /^([-•*]|\d+[.)])\s+/;
+    const allBullets = lines.length > 1 && lines.every(l => bulletRegex.test(l));
+
+    if (allBullets) {
+      const stripped = lines.map(l => l.replace(bulletRegex, '').trim());
+      const [lead, ...rest] = stripped;
+
+      const leadP = document.createElement('p');
+      leadP.className = 'lead';
+      leadP.textContent = lead;
+      container.appendChild(leadP);
+
+      if (rest.length) {
+        const ol = document.createElement('ol');
+        ol.className = 'bullet-group';
+        rest.forEach(item => {
+          const li = document.createElement('li');
+          li.textContent = item;
+          ol.appendChild(li);
+        });
+        container.appendChild(ol);
+      }
+      return rest.length + 1;
+    } else {
+      const paragraphs = text.split(/\n\n+/).map(p => p.trim()).filter(Boolean);
+      if (paragraphs.length === 0) paragraphs.push(text);
+      paragraphs.forEach((p, i) => {
+        const el = document.createElement('p');
+        if (i === 0) el.className = 'lead';
+        el.textContent = p;
+        container.appendChild(el);
+      });
+      return paragraphs.length;
+    }
+  }
+
+  function displayArticle(finalSummary, englishSummary, url, engine, targetLang, length, wasTranslated) {
+    const scriptClass = SCRIPT_MAP[targetLang] || null;
+    const points = renderSummary(finalSummary, scriptClass);
+    const wordCount = countWords(finalSummary);
+    const readTime = Math.max(1, Math.round(wordCount / 220));
+
+    $('article-title').textContent = titleFromUrl(url);
+    const srcEl = $('article-source');
+    srcEl.textContent = domainFromUrl(url);
+    srcEl.href = url;
+    $('article-time').textContent = new Date().toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
+    $('article-engine').textContent = `#${engine}`;
+
+    const lengthNames = {1: 'TL;DR', 3: 'Standard', 5: 'Detailed'};
+    $('length-badge').textContent = lengthNames[length] || 'Standard';
+    $('lang-badge').textContent = targetLang.toUpperCase();
+
+    $('stat-points').textContent = String(points).padStart(2, '0');
+    $('stat-time').innerHTML = `${readTime}<small>min</small>`;
+    $('stat-words').textContent = wordCount.toLocaleString();
+    $('stat-lang').textContent = targetLang.toUpperCase();
+
+    const notice = $('translation-notice');
+    if (wasTranslated) {
+      notice.style.display = '';
+      $('translation-target').textContent = LANG_NAMES[targetLang] || targetLang.toUpperCase();
+
+      const viewOriginal = $('view-original');
+      viewOriginal.textContent = 'View original English';
+      let showingOriginal = false;
+      viewOriginal.onclick = () => {
+        showingOriginal = !showingOriginal;
+        if (showingOriginal) {
+          renderSummary(englishSummary, null);
+          viewOriginal.textContent = `Show ${LANG_NAMES[targetLang] || targetLang.toUpperCase()} translation`;
+        } else {
+          renderSummary(finalSummary, scriptClass);
+          viewOriginal.textContent = 'View original English';
+        }
+      };
+    } else {
+      notice.style.display = 'none';
+    }
+
+    window.__currentSummary = finalSummary;
+    window.__currentUrl = url;
+
+    article.classList.add('visible');
+    setTimeout(() => article.scrollIntoView({behavior: 'smooth', block: 'start'}), 100);
+  }
+
+  // ============================================================
+  // MAIN FLOW
+  // ============================================================
+  async function summarize() {
+    const url = urlInput.value.trim();
+    if (!url) {
+      showError('Please enter a URL first.');
+      urlInput.focus();
+      return;
+    }
+    try { new URL(url); } catch {
+      showError('That doesn\'t look like a valid URL.');
+      urlInput.focus();
+      return;
+    }
+
+    const targetLang = langSelect.value;
+    const engine = engineSelect.value;
+    const length = currentLength;
+    const needsTranslation = !NATIVE_LANGS.has(targetLang);
+
+    // If translating, summarize in English first; else use native lang.
+    const summarizerLang = needsTranslation ? 'en' : targetLang;
+    const apiUrl = `${WORKER_URL}/summarize?url=${encodeURIComponent(url)}&lang=${summarizerLang}&engine=${engine}&length=${length}`;
+
+    submitBtn.disabled = true;
+    startLoader(needsTranslation);
+
+    try {
+      const res = await fetch(apiUrl, { method: 'GET' });
+
+      if (!res.ok) {
+        let msg = `Request failed (${res.status}).`;
+        if (res.status === 429) msg = 'Rate limit reached. Please wait a moment before trying again.';
+        if (res.status === 403) msg = 'API key unauthorized. Please check your subscription on RapidAPI.';
+        if (res.status >= 500) msg = 'The summarization service is temporarily unavailable.';
+        throw new Error(msg);
+      }
+
+      const data = await res.json();
+      if (!data.summary) {
+        throw new Error('No summary was returned. The article may be behind a paywall or unreachable.');
+      }
+
+      setStage('fetch', 'done');
+      setStage('summarize', 'done');
+
+      const englishSummary = data.summary;
+      let finalSummary = englishSummary;
+      let wasTranslated = false;
+
+      if (needsTranslation) {
+        setStage('translate', 'active');
+        loaderMsg.textContent = `Translating into ${LANG_NAMES[targetLang] || targetLang.toUpperCase()}…`;
+        try {
+          finalSummary = await translateText(englishSummary, 'en', targetLang);
+          wasTranslated = true;
+          setStage('translate', 'done');
+        } catch (tErr) {
+          console.warn('Translation failed:', tErr);
+          showToast('Translation failed — showing English');
+          finalSummary = englishSummary;
+          wasTranslated = false;
+        }
+      }
+
+      stopLoader();
+      displayArticle(
+        finalSummary, englishSummary, url, engine,
+        wasTranslated ? targetLang : summarizerLang,
+        length, wasTranslated
+      );
+    } catch (err) {
+      showError(err.message || 'Failed to summarize the article.');
+    } finally {
+      submitBtn.disabled = false;
+    }
+  }
+
+  submitBtn.addEventListener('click', summarize);
+  urlInput.addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') summarize();
+  });
+
+  // ============================================================
+  // ACTIONS
+  // ============================================================
+  $('copy-btn').addEventListener('click', async () => {
+    if (!window.__currentSummary) return;
+    try {
+      await navigator.clipboard.writeText(window.__currentSummary);
+      showToast('Copied to clipboard');
+    } catch {
+      showToast('Unable to copy');
+    }
+  });
+
+  $('open-btn').addEventListener('click', () => {
+    if (window.__currentUrl) window.open(window.__currentUrl, '_blank', 'noopener');
+  });
+
+  $('new-btn').addEventListener('click', () => {
+    article.classList.remove('visible');
+    urlInput.value = '';
+    urlInput.focus();
+    window.scrollTo({top: 0, behavior: 'smooth'});
+  });
+</script>
+</body>
+</html>

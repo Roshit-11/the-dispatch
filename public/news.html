@@ -1,0 +1,919 @@
+<!DOCTYPE html>
+<html lang="ne">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>The Dispatch — नेपाली समाचार संग्रह</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,400;9..144,500;9..144,600;9..144,700;9..144,900&family=JetBrains+Mono:wght@400;500&family=Inter+Tight:wght@400;500;600&family=Noto+Sans+Devanagari:wght@400;500;600;700&family=Noto+Serif+Devanagari:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --cream: #f4efe6;
+    --cream-deep: #ebe3d3;
+    --ink: #1a1613;
+    --ink-soft: #3d342c;
+    --rust: #b8441f;
+    --rust-deep: #8a2f14;
+    --gold: #c49a3f;
+    --sage: #5a6b4a;
+    --muted: #7a6e61;
+    --paper-shadow: 0 2px 0 rgba(26, 22, 19, 0.04), 0 20px 40px -20px rgba(26, 22, 19, 0.15);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body {
+    background: var(--cream);
+    color: var(--ink);
+    font-family: 'Noto Serif Devanagari', 'Fraunces', Georgia, serif;
+    font-feature-settings: "kern";
+    -webkit-font-smoothing: antialiased;
+    min-height: 100vh;
+  }
+
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      radial-gradient(circle at 20% 30%, rgba(184, 68, 31, 0.03) 0%, transparent 40%),
+      radial-gradient(circle at 80% 70%, rgba(196, 154, 63, 0.04) 0%, transparent 50%);
+    pointer-events: none;
+    z-index: 0;
+  }
+  body::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.1 0 0 0 0 0.08 0 0 0 0 0.07 0 0 0 0.035 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    pointer-events: none;
+    opacity: 0.5;
+    z-index: 1;
+    mix-blend-mode: multiply;
+  }
+
+  .container {
+    position: relative;
+    z-index: 2;
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 2rem 2rem 4rem;
+  }
+
+  /* ---------- Top nav ---------- */
+  .topbar {
+    border-top: 3px solid var(--ink);
+    border-bottom: 1px solid var(--ink);
+    padding: 0.6rem 0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.72rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+  }
+  .topbar nav { display: flex; gap: 1.5rem; }
+  .topbar nav a {
+    color: var(--ink-soft);
+    text-decoration: none;
+    padding-bottom: 2px;
+    border-bottom: 1px solid transparent;
+  }
+  .topbar nav a:hover { color: var(--ink); border-bottom-color: var(--ink); }
+  .topbar nav a.active { color: var(--rust); border-bottom-color: var(--rust); }
+  .topbar .dot {
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    background: var(--rust);
+    border-radius: 50%;
+    margin: 0 0.4rem 0 0;
+    animation: pulse 2s ease-in-out infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.4; transform: scale(0.8); }
+  }
+
+  /* ---------- Masthead ---------- */
+  .masthead {
+    text-align: center;
+    padding: 3rem 0 1.5rem;
+    border-bottom: 1px solid var(--ink);
+  }
+  .masthead .eyebrow {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.68rem;
+    letter-spacing: 0.3em;
+    text-transform: uppercase;
+    color: var(--rust);
+    margin-bottom: 1rem;
+    display: block;
+  }
+  .masthead h1 {
+    font-family: 'Fraunces', serif;
+    font-weight: 900;
+    font-size: clamp(3rem, 7.5vw, 5.5rem);
+    line-height: 0.92;
+    letter-spacing: -0.04em;
+    font-variation-settings: "opsz" 144;
+    margin-bottom: 0.5rem;
+  }
+  .masthead h1 em {
+    font-style: italic;
+    font-weight: 300;
+    color: var(--rust-deep);
+    font-variation-settings: "opsz" 144, "SOFT" 100;
+  }
+  .masthead .np-title {
+    font-family: 'Noto Serif Devanagari', serif;
+    font-size: 1.4rem;
+    font-weight: 500;
+    color: var(--ink-soft);
+    margin-top: 0.8rem;
+    letter-spacing: 0.02em;
+  }
+  .masthead .subtitle {
+    font-family: 'Fraunces', serif;
+    font-style: italic;
+    font-size: 1rem;
+    color: var(--ink-soft);
+    margin-top: 0.5rem;
+  }
+
+  /* ---------- Toolbar: filters + status ---------- */
+  .toolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem 0;
+    border-bottom: 3px double var(--ink);
+    gap: 1rem;
+    flex-wrap: wrap;
+    margin-bottom: 2.5rem;
+  }
+  .filter-row {
+    display: flex;
+    gap: 0.4rem;
+    flex-wrap: wrap;
+  }
+  .filter-btn {
+    padding: 0.4rem 0.9rem;
+    border: 1px solid var(--ink);
+    background: var(--cream);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.7rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .filter-btn:hover { background: var(--cream-deep); }
+  .filter-btn.active {
+    background: var(--ink);
+    color: var(--cream);
+  }
+  .filter-btn .count {
+    margin-left: 0.4rem;
+    padding: 0.05rem 0.35rem;
+    background: rgba(184, 68, 31, 0.15);
+    color: var(--rust-deep);
+    font-size: 0.65rem;
+    border-radius: 2px;
+  }
+  .filter-btn.active .count {
+    background: rgba(244, 239, 230, 0.2);
+    color: var(--cream);
+  }
+  .status {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.68rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+  }
+  .status .refresh-btn {
+    padding: 0.4rem 0.7rem;
+    border: 1px solid var(--ink);
+    background: transparent;
+    color: var(--ink);
+    font-family: inherit;
+    font-size: inherit;
+    letter-spacing: inherit;
+    text-transform: inherit;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    transition: all 0.15s;
+  }
+  .status .refresh-btn:hover { background: var(--ink); color: var(--cream); }
+  .status .refresh-btn.spinning svg { animation: spin 1s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ---------- Loading / empty states ---------- */
+  .state {
+    padding: 5rem 2rem;
+    text-align: center;
+    border: 1px dashed var(--ink-soft);
+    background: rgba(255, 255, 255, 0.3);
+  }
+  .state h3 {
+    font-family: 'Fraunces', serif;
+    font-style: italic;
+    font-weight: 400;
+    font-size: 1.8rem;
+    color: var(--ink);
+    margin-bottom: 0.5rem;
+  }
+  .state p {
+    font-family: 'Noto Serif Devanagari', serif;
+    color: var(--ink-soft);
+    max-width: 500px;
+    margin: 0 auto;
+    line-height: 1.6;
+  }
+  .state .spinner-big {
+    display: inline-block;
+    width: 48px;
+    height: 48px;
+    border: 2px solid var(--cream-deep);
+    border-top-color: var(--rust);
+    border-radius: 50%;
+    animation: spin 0.9s linear infinite;
+    margin-bottom: 1.5rem;
+  }
+
+  /* ---------- Article grid ---------- */
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+    gap: 2rem;
+  }
+  @media (max-width: 640px) {
+    .grid { grid-template-columns: 1fr; gap: 1.5rem; }
+  }
+
+  /* First article - feature card, spans wider */
+  .grid .card:first-child {
+    grid-column: span 2;
+    display: grid;
+    grid-template-columns: 1.2fr 1fr;
+    gap: 0;
+    min-height: 360px;
+  }
+  .grid .card:first-child .card-image {
+    aspect-ratio: auto;
+    height: 100%;
+  }
+  .grid .card:first-child .card-body {
+    padding: 2rem 2rem 1.75rem;
+  }
+  .grid .card:first-child .card-title {
+    font-size: clamp(1.5rem, 2.4vw, 2.1rem);
+    line-height: 1.2;
+    margin-bottom: 1rem;
+  }
+  .grid .card:first-child .card-summary {
+    font-size: 1.05rem;
+    line-height: 1.65;
+    -webkit-line-clamp: 6;
+  }
+  @media (max-width: 900px) {
+    .grid .card:first-child {
+      grid-column: span 1;
+      grid-template-columns: 1fr;
+    }
+    .grid .card:first-child .card-image { aspect-ratio: 16/9; height: auto; }
+  }
+
+  .card {
+    background: #fbf7ee;
+    border: 1px solid var(--ink);
+    overflow: hidden;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    transition: transform 0.2s, box-shadow 0.2s;
+    cursor: pointer;
+    animation: cardFadeIn 0.5s ease-out backwards;
+  }
+  .card:hover {
+    transform: translateY(-3px);
+    box-shadow: var(--paper-shadow);
+  }
+  @keyframes cardFadeIn {
+    from { opacity: 0; transform: translateY(12px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .card-image {
+    width: 100%;
+    aspect-ratio: 16/9;
+    background: var(--cream-deep);
+    position: relative;
+    overflow: hidden;
+  }
+  .card-image img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    transition: transform 0.4s ease;
+    display: block;
+  }
+  .card:hover .card-image img { transform: scale(1.04); }
+  .card-image.no-image {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background:
+      repeating-linear-gradient(45deg,
+        transparent, transparent 12px,
+        rgba(184, 68, 31, 0.05) 12px, rgba(184, 68, 31, 0.05) 13px);
+  }
+  .card-image.no-image::after {
+    content: 'समाचार';
+    font-family: 'Noto Serif Devanagari', serif;
+    font-size: 1.3rem;
+    color: var(--muted);
+    letter-spacing: 0.1em;
+  }
+
+  .card-source-badge {
+    position: absolute;
+    top: 0.75rem;
+    left: 0.75rem;
+    padding: 0.3rem 0.7rem;
+    background: var(--ink);
+    color: var(--cream);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.62rem;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    z-index: 2;
+  }
+  .card-source-badge.src-ekantipur    { background: #8a2f14; }
+  .card-source-badge.src-onlinekhabar { background: #1a1613; }
+  .card-source-badge.src-ratopati     { background: #b8441f; }
+  .card-source-badge.src-setopati     { background: #5a6b4a; }
+
+  .card-body {
+    padding: 1.5rem 1.4rem 1.3rem;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+  }
+  .card-kicker {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.62rem;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--rust);
+    margin-bottom: 0.6rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .card-kicker::before {
+    content: '';
+    width: 20px;
+    height: 1px;
+    background: var(--rust);
+  }
+  .card-title {
+    font-family: 'Noto Serif Devanagari', 'Fraunces', serif;
+    font-weight: 600;
+    font-size: 1.15rem;
+    line-height: 1.35;
+    color: var(--ink);
+    margin-bottom: 0.8rem;
+    letter-spacing: 0;
+  }
+  .card-summary {
+    font-family: 'Noto Sans Devanagari', sans-serif;
+    font-size: 0.92rem;
+    line-height: 1.6;
+    color: var(--ink-soft);
+    margin-bottom: 1rem;
+    flex: 1;
+    display: -webkit-box;
+    -webkit-line-clamp: 4;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  .card-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-top: 0.8rem;
+    border-top: 1px solid rgba(26, 22, 19, 0.15);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.65rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  .card-footer .read-more {
+    color: var(--rust-deep);
+    text-decoration: none;
+    border-bottom: 1px solid var(--rust-deep);
+    padding-bottom: 1px;
+  }
+
+  /* ---------- Reader modal ---------- */
+  .modal {
+    position: fixed;
+    inset: 0;
+    background: rgba(26, 22, 19, 0.65);
+    z-index: 200;
+    display: none;
+    align-items: flex-start;
+    justify-content: center;
+    padding: 3rem 1.5rem;
+    overflow-y: auto;
+    backdrop-filter: blur(4px);
+  }
+  .modal.visible { display: flex; }
+  .modal-content {
+    background: var(--cream);
+    max-width: 760px;
+    width: 100%;
+    border: 1px solid var(--ink);
+    box-shadow: 0 30px 60px -20px rgba(0, 0, 0, 0.5);
+    position: relative;
+    animation: modalIn 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  @keyframes modalIn {
+    from { opacity: 0; transform: translateY(30px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .modal-close {
+    position: absolute;
+    top: 1rem;
+    right: 1rem;
+    background: var(--ink);
+    color: var(--cream);
+    border: none;
+    width: 38px;
+    height: 38px;
+    cursor: pointer;
+    font-size: 1.2rem;
+    z-index: 3;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .modal-close:hover { background: var(--rust); }
+  .modal-image {
+    width: 100%;
+    aspect-ratio: 16/9;
+    background: var(--cream-deep);
+    overflow: hidden;
+  }
+  .modal-image img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+  .modal-body { padding: 2rem 2.5rem 2.5rem; }
+  @media (max-width: 600px) { .modal-body { padding: 1.5rem 1.3rem 2rem; } }
+  .modal-kicker {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.68rem;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--rust);
+    margin-bottom: 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    flex-wrap: wrap;
+  }
+  .modal-kicker::before {
+    content: '';
+    width: 30px;
+    height: 1px;
+    background: var(--rust);
+  }
+  .modal-kicker .badge {
+    padding: 0.2rem 0.55rem;
+    background: var(--ink);
+    color: var(--cream);
+    font-size: 0.6rem;
+  }
+  .modal-title {
+    font-family: 'Noto Serif Devanagari', serif;
+    font-weight: 700;
+    font-size: clamp(1.6rem, 3.5vw, 2.3rem);
+    line-height: 1.25;
+    color: var(--ink);
+    margin-bottom: 1.5rem;
+  }
+  .modal-summary {
+    font-family: 'Noto Serif Devanagari', serif;
+    font-size: 1.1rem;
+    line-height: 1.8;
+    color: var(--ink);
+    margin-bottom: 2rem;
+    padding-left: 1rem;
+    border-left: 3px solid var(--rust);
+  }
+  .modal-meta {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--ink);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.7rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+    flex-wrap: wrap;
+  }
+  .modal-meta a {
+    color: var(--rust-deep);
+    text-decoration: none;
+    border-bottom: 1px solid var(--rust-deep);
+    padding-bottom: 1px;
+  }
+  .modal-meta a:hover { color: var(--ink); border-color: var(--ink); }
+
+  /* ---------- Footer ---------- */
+  footer {
+    margin-top: 5rem;
+    padding-top: 2rem;
+    border-top: 1px solid var(--ink);
+    display: flex;
+    justify-content: space-between;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.68rem;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+    gap: 1rem;
+    flex-wrap: wrap;
+  }
+
+  /* ---------- Error state ---------- */
+  .error-box {
+    margin: 2rem 0;
+    padding: 1.5rem;
+    border: 1px solid var(--rust-deep);
+    background: rgba(184, 68, 31, 0.08);
+  }
+  .error-box strong {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.72rem;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--rust-deep);
+    display: block;
+    margin-bottom: 0.5rem;
+  }
+  .error-box p {
+    font-family: 'Fraunces', serif;
+    font-size: 1rem;
+    color: var(--ink);
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <!-- Top nav -->
+  <div class="topbar">
+    <span><span class="dot"></span>Live Desk Active</span>
+    <nav>
+      <a href="index.html">Summarize a URL</a>
+      <a href="news.html" class="active">Nepali News Feed</a>
+    </nav>
+    <span id="today-date">—</span>
+  </div>
+
+  <!-- Masthead -->
+  <header class="masthead">
+    <span class="eyebrow">✦ Aggregated · Summarized · In Nepali ✦</span>
+    <h1>The <em>Dispatch</em></h1>
+    <div class="np-title">नेपाली समाचार संग्रह</div>
+    <p class="subtitle">Nepal's leading news portals, summarized every 15 minutes.</p>
+  </header>
+
+  <!-- Toolbar -->
+  <div class="toolbar">
+    <div class="filter-row" id="filter-row">
+      <button class="filter-btn active" data-source="all">All <span class="count" id="count-all">0</span></button>
+      <button class="filter-btn" data-source="ekantipur">Ekantipur <span class="count" id="count-ekantipur">0</span></button>
+      <button class="filter-btn" data-source="onlinekhabar">Online Khabar <span class="count" id="count-onlinekhabar">0</span></button>
+      <button class="filter-btn" data-source="ratopati">Ratopati <span class="count" id="count-ratopati">0</span></button>
+      <button class="filter-btn" data-source="setopati">Setopati <span class="count" id="count-setopati">0</span></button>
+    </div>
+    <div class="status">
+      <span>Last updated: <span id="last-updated">—</span></span>
+      <button class="refresh-btn" id="refresh-btn" aria-label="Refresh">
+        <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M13.5 8a5.5 5.5 0 1 1-1.77-4.04"/><path d="M13.5 2v3.5H10"/></svg>
+        Refresh
+      </button>
+    </div>
+  </div>
+
+  <!-- Error (hidden by default) -->
+  <div class="error-box" id="error-box" style="display: none;">
+    <strong>Unable to load feed</strong>
+    <p id="error-msg">—</p>
+  </div>
+
+  <!-- States -->
+  <div class="state" id="loading-state">
+    <div class="spinner-big"></div>
+    <h3>Gathering today's news…</h3>
+    <p>Fetching the latest from Ekantipur, Online Khabar, Ratopati, and Setopati.</p>
+  </div>
+
+  <div class="state" id="empty-state" style="display: none;">
+    <h3>No articles yet</h3>
+    <p>The aggregator runs every 15 minutes. Check back shortly, or trigger a manual refresh from the admin endpoint.</p>
+  </div>
+
+  <!-- Grid -->
+  <div class="grid" id="grid"></div>
+
+  <footer>
+    <span>The Dispatch © 2026</span>
+    <span>Sourced from ekantipur · onlinekhabar · ratopati · setopati</span>
+    <span>Summaries by Gemini</span>
+  </footer>
+</div>
+
+<!-- Reader modal -->
+<div class="modal" id="modal">
+  <div class="modal-content">
+    <button class="modal-close" id="modal-close" aria-label="Close">✕</button>
+    <div class="modal-image" id="modal-image"></div>
+    <div class="modal-body">
+      <div class="modal-kicker">
+        <span id="modal-source-name">—</span>
+        <span class="badge" id="modal-source-np">—</span>
+      </div>
+      <h2 class="modal-title" id="modal-title">—</h2>
+      <div class="modal-summary" id="modal-summary">—</div>
+      <div class="modal-meta">
+        <span>Collected: <span id="modal-time">—</span></span>
+        <a id="modal-original" href="#" target="_blank" rel="noopener">Read full article on <span id="modal-domain">—</span> ↗</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  // ============================================================
+  // CONFIG
+  // ============================================================
+  // Frontend and backend are served from the same Node server,
+  // so relative /api paths work directly.
+  const WORKER_URL = '/api';
+
+  // Auto-refresh the UI every 5 minutes. The backend cron scrapes every 15,
+  // so this ensures new articles appear without a page reload.
+  const AUTO_REFRESH_MS = 5 * 60 * 1000;
+
+  const SOURCE_NP_NAMES = {
+    ekantipur:    'कान्तिपुर',
+    onlinekhabar: 'अनलाइनखबर',
+    ratopati:     'रातोपाटी',
+    setopati:     'सेतोपाटी',
+  };
+
+  // ============================================================
+  // STATE
+  // ============================================================
+  let allArticles = [];
+  let activeFilter = 'all';
+  let refreshTimer = null;
+
+  const $ = (id) => document.getElementById(id);
+
+  // Populate today's date
+  const today = new Date();
+  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  $('today-date').textContent = `${days[today.getDay()]} · ${months[today.getMonth()]} ${today.getDate()}, ${today.getFullYear()}`;
+
+  // ============================================================
+  // FETCH & RENDER
+  // ============================================================
+  async function loadFeed(isManualRefresh = false) {
+    const refreshBtn = $('refresh-btn');
+    if (isManualRefresh) refreshBtn.classList.add('spinning');
+
+    try {
+      const res = await fetch(`${WORKER_URL}/news`, { cache: 'no-store' });
+      if (!res.ok) throw new Error(`Request failed (${res.status})`);
+      const data = await res.json();
+
+      allArticles = Array.isArray(data.articles) ? data.articles : [];
+      $('error-box').style.display = 'none';
+
+      if (allArticles.length === 0) {
+        $('loading-state').style.display = 'none';
+        $('empty-state').style.display = '';
+        $('grid').innerHTML = '';
+      } else {
+        $('loading-state').style.display = 'none';
+        $('empty-state').style.display = 'none';
+        renderFeed();
+      }
+
+      updateCounts();
+      if (data.updatedAt) {
+        $('last-updated').textContent = timeAgo(data.updatedAt);
+      }
+    } catch (err) {
+      $('loading-state').style.display = 'none';
+      $('error-box').style.display = '';
+      $('error-msg').textContent = err.message || 'Unable to reach the news server.';
+    } finally {
+      if (isManualRefresh) {
+        setTimeout(() => refreshBtn.classList.remove('spinning'), 600);
+      }
+    }
+  }
+
+  function renderFeed() {
+    const grid = $('grid');
+    const filtered = activeFilter === 'all'
+      ? allArticles
+      : allArticles.filter(a => a.source === activeFilter);
+
+    if (filtered.length === 0) {
+      grid.innerHTML = `
+        <div class="state" style="grid-column: 1 / -1;">
+          <h3>No articles from this source yet</h3>
+          <p>The aggregator may still be warming up, or this source failed its last fetch. Try another filter.</p>
+        </div>`;
+      return;
+    }
+
+    grid.innerHTML = filtered.map((art, idx) => renderCard(art, idx)).join('');
+
+    // Attach click handlers
+    grid.querySelectorAll('.card').forEach((card, idx) => {
+      card.addEventListener('click', (e) => {
+        // Let the "read full" link do its own thing
+        if (e.target.closest('.read-more')) return;
+        openModal(filtered[idx]);
+      });
+    });
+  }
+
+  function renderCard(art, idx) {
+    const imgHtml = art.imageUrl
+      ? `<div class="card-image"><img src="${escapeAttr(art.imageUrl)}" alt="${escapeAttr(art.title)}" loading="lazy" onerror="this.parentElement.classList.add('no-image'); this.remove();" /></div>`
+      : `<div class="card-image no-image"></div>`;
+
+    const domain = safeDomain(art.url);
+
+    return `
+      <article class="card" style="animation-delay: ${Math.min(idx * 60, 400)}ms">
+        <span class="card-source-badge src-${escapeAttr(art.source)}">${escapeHtml(art.sourceName || art.source)}</span>
+        ${imgHtml}
+        <div class="card-body">
+          <div class="card-kicker">${escapeHtml(art.sourceNameNp || SOURCE_NP_NAMES[art.source] || art.source)}</div>
+          <h2 class="card-title">${escapeHtml(art.title)}</h2>
+          <p class="card-summary">${escapeHtml(art.summary)}</p>
+          <div class="card-footer">
+            <span>${timeAgo(art.timestamp)}</span>
+            <a class="read-more" href="${escapeAttr(art.url)}" target="_blank" rel="noopener" onclick="event.stopPropagation();">पूरा पढ्नुहोस् ↗</a>
+          </div>
+        </div>
+      </article>
+    `;
+  }
+
+  function updateCounts() {
+    const counts = { all: allArticles.length, ekantipur: 0, onlinekhabar: 0, ratopati: 0, setopati: 0 };
+    for (const a of allArticles) {
+      if (counts[a.source] !== undefined) counts[a.source]++;
+    }
+    for (const key of Object.keys(counts)) {
+      const el = document.getElementById('count-' + key);
+      if (el) el.textContent = counts[key];
+    }
+  }
+
+  // ============================================================
+  // MODAL
+  // ============================================================
+  function openModal(art) {
+    $('modal-title').textContent = art.title;
+    $('modal-summary').textContent = art.summary;
+    $('modal-source-name').textContent = art.sourceName || art.source;
+    $('modal-source-np').textContent = art.sourceNameNp || SOURCE_NP_NAMES[art.source] || '';
+    $('modal-time').textContent = timeAgo(art.timestamp);
+    $('modal-domain').textContent = safeDomain(art.url);
+    $('modal-original').href = art.url;
+
+    const imgContainer = $('modal-image');
+    if (art.imageUrl) {
+      imgContainer.innerHTML = `<img src="${escapeAttr(art.imageUrl)}" alt="" onerror="this.parentElement.style.display='none';" />`;
+      imgContainer.style.display = '';
+    } else {
+      imgContainer.style.display = 'none';
+    }
+
+    $('modal').classList.add('visible');
+    document.body.style.overflow = 'hidden';
+  }
+
+  function closeModal() {
+    $('modal').classList.remove('visible');
+    document.body.style.overflow = '';
+  }
+
+  $('modal-close').addEventListener('click', closeModal);
+  $('modal').addEventListener('click', (e) => {
+    if (e.target === $('modal')) closeModal();
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') closeModal();
+  });
+
+  // ============================================================
+  // FILTERS
+  // ============================================================
+  document.querySelectorAll('.filter-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      activeFilter = btn.dataset.source;
+      renderFeed();
+    });
+  });
+
+  // ============================================================
+  // REFRESH
+  // ============================================================
+  $('refresh-btn').addEventListener('click', () => loadFeed(true));
+
+  function startAutoRefresh() {
+    if (refreshTimer) clearInterval(refreshTimer);
+    refreshTimer = setInterval(() => loadFeed(false), AUTO_REFRESH_MS);
+  }
+
+  // Pause auto-refresh when tab is hidden, resume when visible
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) {
+      if (refreshTimer) { clearInterval(refreshTimer); refreshTimer = null; }
+    } else {
+      loadFeed(false);
+      startAutoRefresh();
+    }
+  });
+
+  // ============================================================
+  // UTILITIES
+  // ============================================================
+  function timeAgo(ts) {
+    if (!ts) return '—';
+    const diff = Date.now() - ts;
+    const mins = Math.floor(diff / 60000);
+    if (mins < 1) return 'just now';
+    if (mins < 60) return `${mins} min ago`;
+    const hrs = Math.floor(mins / 60);
+    if (hrs < 24) return `${hrs} hr ago`;
+    const dys = Math.floor(hrs / 24);
+    return `${dys}d ago`;
+  }
+
+  function safeDomain(url) {
+    try { return new URL(url).hostname.replace(/^www\./, ''); }
+    catch { return 'source'; }
+  }
+
+  function escapeHtml(s) {
+    if (s == null) return '';
+    return String(s)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+  function escapeAttr(s) { return escapeHtml(s); }
+
+  // ============================================================
+  // GO
+  // ============================================================
+  loadFeed(false);
+  startAutoRefresh();
+</script>
+</body>
+</html>
