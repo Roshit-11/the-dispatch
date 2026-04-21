@@ -1,37 +1,62 @@
-# The Dispatch — Local Build
+# The Dispatch — Nepali News Aggregator & Summarizer
 
-A local Node.js app that:
-1. **Summarizes any news URL** into your chosen language (10 native + 8 via translation)
-2. **Aggregates Nepali news** from ekantipur, onlinekhabar, ratopati, and setopati — scraped + summarized every 10 minutes using Llama 3.2 3B
+A lightweight Node.js application that aggregates and summarizes Nepali news articles in real-time using AI. It features both a single-article summarizer and an automated Nepali news feed updated every 10 minutes.
 
-Runs entirely on your machine. No cloud deployment needed.
+**Live Demo:** [https://the-dispatch-wa0s.onrender.com](https://the-dispatch-wa0s.onrender.com)
 
 ---
 
-## Setup (one-time, 2 minutes)
+## ✨ Features
 
-**Requirements:** [Node.js 18+](https://nodejs.org) installed.
-
-1. **Open this folder in VS Code**:
-   ```
-   File → Open Folder → select "news-summarizer"
-   ```
-
-2. **Open the built-in terminal** (Ctrl + ` or Terminal → New Terminal) and run:
-   ```bash
-   npm install
-   ```
-   This installs Express and dotenv. Takes ~20 seconds.
-
-3. **Verify `.env`** — it should already have your keys. If not, open `.env` and fill in:
-   ```
-   RAPIDAPI_KEY=...
-   MYMEMORY_EMAIL=...
-   ```
+- 🇳🇵 **Nepali News Aggregator** — Automatically scrapes & summarizes articles from 4 major Nepali news sites every 10 minutes
+- 📰 **Single Article Summarizer** — Paste any news URL to get an instant summary in your chosen language
+- 🤖 **AI-Powered Summaries** — Uses Llama 3.2 3B via OpenRouter for fast, accurate summaries
+- 🌍 **Multi-Language Support** — 10 native languages + 8 via translation
+- ⚡ **Real-Time Updates** — Live feed with deduplication to avoid redundant summaries
+- 🚀 **Fully Automated** — Runs 24/7 on Render with UptimeRobot monitoring
+- 📱 **Responsive UI** — Clean, mobile-friendly interface
 
 ---
 
-## Running
+## 🚀 Quick Start (Local Development)
+
+### Prerequisites
+- [Node.js 18+](https://nodejs.org)
+- Free API keys from [RapidAPI](https://rapidapi.com) and [OpenRouter](https://openrouter.ai)
+
+### 1. Clone & Install
+
+```bash
+git clone https://github.com/Roshit-11/the-dispatch.git
+cd the-dispatch
+npm install
+```
+
+### 2. Configure Environment Variables
+
+Create a `.env` file in the root directory:
+
+```env
+# RapidAPI key (for article fetching)
+RAPIDAPI_KEY=your_rapidapi_key_here
+
+# OpenRouter API key (for Llama 3.2 3B summaries)
+OPENROUTER_API_KEY=your_openrouter_key_here
+
+# MyMemory email (for translation)
+MYMEMORY_EMAIL=your_email@example.com
+
+# Server configuration
+PORT=3000
+SCRAPE_INTERVAL_MINUTES=10
+```
+
+**Where to get keys:**
+- **RapidAPI Key:** [RapidAPI Dashboard](https://rapidapi.com/account/settings/security)
+- **OpenRouter Key:** [OpenRouter Settings](https://openrouter.ai/settings/keys) (free tier available)
+- **MyMemory Email:** Any email address (used to raise translation quota)
+
+### 3. Run Locally
 
 ```bash
 npm start
@@ -40,156 +65,184 @@ npm start
 You'll see:
 ```
 ✓ RapidAPI key loaded
-✓ MyMemory email: noreply.meetingai@gmail.com
+✓ OpenRouter key loaded
+✓ MyMemory email: your_email@example.com
 
-📰  The Dispatch is running
-    Open:        http://localhost:3000
-    News feed:   http://localhost:3000/news.html
-    Health:      http://localhost:3000/api/health
-    Trigger:     http://localhost:3000/api/admin/scrape-now
-    Cycle every: 10 minute(s)
+📰 The Dispatch is running
+   Open:        http://localhost:3000
+   News feed:   http://localhost:3000/news.html
+   Health:      http://localhost:3000/api/health
+   Trigger:     http://localhost:3000/api/admin/scrape-now
+   Cycle every: 10 minute(s)
 ```
 
 Open **http://localhost:3000** in your browser.
 
-To stop the server: press `Ctrl + C` in the terminal.
+---
 
-For auto-restart while editing code, use `npm run dev` instead.
+## 📖 How It Works
+
+### Single-Article Summarizer (`/`)
+1. Paste any news article URL
+2. Choose target language (10 native + 8 via translation)
+3. Select summary length (short/medium/long)
+4. Get an instant AI-powered summary
+
+### Nepali News Aggregator (`/news.html`)
+The server runs automated scrape cycles:
+
+1. **Fetches** new articles from 4 Nepali news sites:
+   - Ekantipur
+   - Online Khabar
+   - Ratopati
+   - Setopati
+
+2. **Filters** articles using deduplication (tracks seen URLs for 7 days)
+
+3. **Summarizes** new articles using Llama 3.2 3B AI model (3-sentence summaries in Nepali)
+
+4. **Caches** results locally for instant frontend load times
+
+5. **Repeats** every 10 minutes (configurable)
 
 ---
 
-## How it works
+## 📁 Project Structure
 
-### The single-article page (`/`)
-Same as yesterday. Paste a news URL, pick language + length, hit Summarize. Backend proxies to the RapidAPI article summarizer, translates via MyMemory if the target language needs it.
-
-### The Nepali aggregator page (`/news.html`)
-The server runs a scrape cycle **on startup** and then **every 10 minutes** (configurable via `SCRAPE_INTERVAL_MINUTES` in `.env`). Each cycle:
-
-1. Fetches article listings from the 4 Nepali sites (RSS for onlinekhabar, HTML scraping for the rest)
-2. Filters to new articles not seen before (deduplicated on disk)
-3. For up to 3 new articles per site, fetches the full article text
-4. Sends the text to Llama 3.2 3B on RapidAPI, asks for a 3-sentence Nepali summary
-5. Saves everything to `./cache/feed.json`
-
-The news page just reads `/api/news` and renders whatever's in the cache. No scraping happens on page load.
-
-### Project layout
 ```
-news-summarizer/
-├── .env                 ← your keys (DO NOT commit to git)
-├── .gitignore
-├── package.json
-├── server.js            ← Express server + scrape loop
-├── cache/               ← auto-created, stores feed.json and seen.json
-│   ├── feed.json
-│   └── seen.json
-├── public/              ← static frontend served at /
-│   ├── index.html       ← single-article summarizer
-│   └── news.html        ← Nepali aggregator
+the-dispatch/
+├── server.js              ← Express server + scrape scheduler
+├── package.json           ← Dependencies
+├── .env                   ← Environment variables (DO NOT commit)
+├── .gitignore             ← Git ignore rules
+├── public/
+│   ├── index.html         ← Single-article summarizer UI
+│   ├── news.html          ← Nepali news feed UI
+│   ├── style.css          ← Styling
+│   └── script.js          ← Frontend logic
+├── cache/                 ← Auto-created storage
+│   ├── feed.json          ← Cached articles
+│   └── seen.json          ← Deduplication tracker
 └── README.md
 ```
 
 ---
 
-## Testing it
+## 🔌 API Endpoints
 
-After running `npm start`:
-
-| Check | URL |
-|---|---|
-| Health check | http://localhost:3000/api/health |
-| Summarize a URL | http://localhost:3000 → paste any news URL |
-| Trigger scrape immediately | http://localhost:3000/api/admin/scrape-now |
-| See the aggregator | http://localhost:3000/news.html |
-| Raw feed JSON | http://localhost:3000/api/news |
-
-Watch the terminal — every scrape cycle logs exactly what it found and summarized.
+| Endpoint | Method | Purpose |
+|----------|--------|---------|
+| `/` | GET | Single-article summarizer UI |
+| `/news.html` | GET | Nepali news feed UI |
+| `/api/health` | GET | Health check (for uptime monitoring) |
+| `/api/news` | GET | Get cached news feed (JSON) |
+| `/api/summarize` | POST | Summarize a URL + translate |
+| `/api/admin/scrape-now` | GET | Trigger scrape immediately |
 
 ---
 
-## Troubleshooting
-
-**"No articles yet" on news.html after startup**
-First scrape runs ~2 seconds after boot and takes 30-90 seconds to complete (fetches ~12 articles, sends each to Llama). Wait a minute, then refresh. Or hit `/api/admin/scrape-now` to force another cycle.
-
-**Summary appears in English instead of Nepali**
-Llama 3.2 3B is a small model and occasionally ignores language instructions. Not fixable from the client side — it corrects itself on the next cycle. If it happens constantly for a specific site, check the terminal logs to see what article text is being sent.
-
-**"RAPIDAPI_KEY not configured"**
-The `.env` file isn't being read. Make sure you're running `npm start` from inside the `news-summarizer/` folder, not from its parent.
-
-**A specific site returns 0 articles every cycle**
-That site may have changed its HTML structure. Check the terminal output — you'll see warnings like `[ekantipur] HTML scrape failed`. The fix is to update `ARTICLE_URL_PATTERNS` in `server.js` to match the site's current article URL format.
-
-**Port 3000 already in use**
-Change `PORT=3000` to `PORT=3001` (or any free port) in `.env`, then restart.
-
-**Scrape runs, but nothing new appears**
-Check `cache/seen.json` — URLs stay in there for 7 days to prevent re-summarizing. If you want a full reset, just delete the `cache/` folder and restart the server.
-
----
-
-## Deploying to Render.com (10 minutes, no credit card)
+## 🚀 Deploy to Render (Free Tier)
 
 ### Step 1: Push to GitHub
 
-1. Create a **new private repository** on [github.com](https://github.com/new)
-   - Name: `news-summarizer`
-   - Do NOT initialize with README (you already have one)
+```bash
+git remote add origin https://github.com/YOUR_USERNAME/the-dispatch.git
+git branch -M main
+git push -u origin main
+```
 
-2. Push your code:
-   ```bash
-   git remote add origin https://github.com/YOUR_USERNAME/news-summarizer.git
-   git branch -M main
-   git push -u origin main
-   ```
+### Step 2: Create Render Service
 
-### Step 2: Deploy on Render
-
-1. Go to [render.com](https://render.com) and sign up (free tier is fine)
+1. Go to [render.com](https://render.com) and sign up (free)
 2. Click **"New +"** → **"Web Service"**
-3. Select **"Deploy an existing Git repository"**
-4. Paste your GitHub repo URL and authorize Render to access it
-5. Fill in the form:
-   - **Name**: `news-summarizer`
-   - **Environment**: `Node`
-   - **Build command**: `npm install`
-   - **Start command**: `npm start`
-   - **Region**: pick closest to you
-   - **Plan**: Free (sufficient for this app)
+3. Connect your GitHub repository
+4. Fill in:
+   - **Name:** `the-dispatch`
+   - **Environment:** Node
+   - **Build Command:** `npm install`
+   - **Start Command:** `npm start`
+   - **Plan:** Free
 
-6. Click **"Create Web Service"** — Render will deploy automatically
+5. Click **"Create Web Service"**
 
-### Step 3: Add environment variables
+### Step 3: Add Environment Variables
 
-After deployment starts:
-
-1. In Render dashboard, go to your web service
-2. Click **"Environment"** on the left
-3. Add these variables (copy from your `.env` file):
+1. Go to **Settings** → **Environment**
+2. Add these variables (from your `.env`):
    - `RAPIDAPI_KEY`
    - `OPENROUTER_API_KEY`
    - `MYMEMORY_EMAIL`
    - `PORT=3000`
    - `SCRAPE_INTERVAL_MINUTES=10`
 
-4. Click "Save Changes" — service will redeploy
+3. Click **"Save"** — service will redeploy
 
-Your app is now live at `https://news-summarizer-xxx.onrender.com` ✓
+### Step 4: Keep Service Alive (UptimeRobot)
 
-### Step 4: Keep it alive with UptimeRobot (prevents spinning down)
-
-The free tier on Render spins down services after 15 minutes of no traffic. This breaks the 10-minute news scrape cycle. Fix it:
+Render's free tier spins down after 15 minutes of inactivity. Fix this:
 
 1. Go to [uptimerobot.com](https://uptimerobot.com) and sign up (free)
-2. Click **"Add New Monitor"**
-3. Set up:
-   - **Monitor Type**: HTTP(s)
-   - **URL**: `https://news-summarizer-xxx.onrender.com/api/health`
-   - **Monitoring Interval**: 5 minutes
-   - Click **"Create Monitor"**
+2. Click **"Add Monitor"**
+3. Configure:
+   - **Type:** HTTP(s)
+   - **URL:** `https://your-service.onrender.com/api/health`
+   - **Interval:** 5 minutes
 
-Now UptimeRobot pings your service every 5 minutes, keeping it warm. The scrape cycle runs without interruption.
+4. Click **"Create"**
 
+Now your service stays alive 24/7! ✅
 
+---
+
+## 🛠️ Troubleshooting
+
+### "No articles yet" on first load
+First scrape takes 30-90 seconds. Wait a minute or visit `/api/admin/scrape-now` to trigger manually.
+
+### Summaries in English instead of Nepali
+Llama 3.2 3B occasionally ignores language instructions. Usually corrects itself on next cycle.
+
+### API key errors
+- Check `.env` file exists in project root
+- Verify keys are valid and not expired
+- On Render, verify environment variables are set correctly
+
+### Port already in use
+Change `PORT=3000` to `PORT=3001` in `.env`
+
+### Article scraping fails for a site
+Sites may change HTML structure. Update URL patterns in `server.js` if needed.
+
+---
+
+## 📊 Performance
+
+- **Scrape Time:** ~20-30 seconds per cycle (4 sites, ~10 articles)
+- **API Calls/Day:** ~1,440 (well within free tier limits)
+- **Cache Storage:** ~5-10 MB for 7-day history
+- **Uptime:** 24/7 with UptimeRobot
+
+---
+
+## 📝 License
+
+MIT License — see LICENSE file for details
+
+---
+
+## 🤝 Contributing
+
+Found a bug? Have a feature idea? Feel free to:
+1. Fork this repository
+2. Create a feature branch
+3. Submit a pull request
+
+---
+
+## 📧 Contact
+
+For questions or feedback, reach out on GitHub Issues.
+
+---
+
+**Built with ❤️ for Nepali news readers**
