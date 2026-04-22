@@ -6,8 +6,8 @@
 //   2. Proxies calls to RapidAPI article summarizer + MyMemory translation
 //   3. Runs a scrape loop every N minutes that:
 //        - fetches articles from 4 Nepali news sites
-//        - summarizes new ones via Llama 3.2 3B on OpenRouter (free tier)
-//        - falls back to Llama 3.1 8B if the primary model is unavailable
+//        - summarizes new ones via Llama 3.3 70B on OpenRouter (free tier)
+//        - falls back through Gemma 3 27B, DeepSeek v3, Qwen3 8B, Mistral 7B
 //        - stores results on disk in ./cache/feed.json
 //   4. Serves the stored feed at /api/news
 //
@@ -30,7 +30,7 @@ const RAPIDAPI_KEY = process.env.RAPIDAPI_KEY || '';
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY || '';
 const MYMEMORY_EMAIL = process.env.MYMEMORY_EMAIL || '';
 const ADMIN_TOKEN = process.env.ADMIN_TOKEN || '';
-const SCRAPE_INTERVAL_MIN = Math.max(5, Number(process.env.SCRAPE_INTERVAL_MINUTES || 10));
+const SCRAPE_INTERVAL_MIN = Math.max(5, Number(process.env.SCRAPE_INTERVAL_MINUTES || 30));
 
 const ARTICLE_HOST = 'article-extractor-and-summarizer.p.rapidapi.com';
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
@@ -39,13 +39,15 @@ const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
 // availability constantly — having multiple fallbacks means we don't fail
 // a whole cycle when one provider is rate-limited or delisted.
 //
-// `openrouter/auto` automatically picks whichever free model is currently
-// available, so we try that first. If that 429s, we try two specific
-// multilingual models that handle Devanagari script well.
+// Fallback chain ordered by Devanagari quality and availability.
+// Using larger, more capable models first — they produce better Nepali output.
+// Free-tier models rotate in/out so we maintain 5 fallbacks to stay resilient.
 const OPENROUTER_MODELS = [
-  'openrouter/auto',
-  'meta-llama/llama-3-8b-instruct:free',
-  'mistralai/mistral-7b-instruct:free',
+  'meta-llama/llama-3.3-70b-instruct:free',   // best free multilingual, great Nepali
+  'google/gemma-3-27b-it:free',                // strong Devanagari support
+  'deepseek/deepseek-chat-v3-0324:free',       // very capable, good multilingual
+  'qwen/qwen3-8b:free',                        // lightweight fallback, good Nepali
+  'mistralai/mistral-7b-instruct:free',        // last-resort fallback
 ];
 
 const MYMEMORY_URL = 'https://api.mymemory.translated.net/get';
@@ -328,8 +330,7 @@ async function fetchArticleText(articleUrl) {
     if (text.length > 40) paragraphs.push(text);
   }
 
-  // Keep it tight — Llama 3.2 3B has a limited context
-  return paragraphs.join('\n\n').slice(0, 1500);
+  return paragraphs.join('\n\n').slice(0, 1200);
 }
 
 // -----------------------------------------------------------
@@ -358,7 +359,7 @@ async function callOpenRouter(model, messages) {
       messages,
       temperature: 0.3,
       top_p: 0.9,
-      max_tokens: 150,
+      max_tokens: 120,
     }),
   }, 30_000);
 
