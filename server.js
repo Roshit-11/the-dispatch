@@ -43,9 +43,9 @@ const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
 // available, so we try that first. If that 429s, we try two specific
 // multilingual models that handle Devanagari script well.
 const OPENROUTER_MODELS = [
-  'openrouter/auto',                        // auto-router (preferred)
-  'meta-llama/llama-3.3-70b-instruct:free', // strong multilingual fallback
-  'google/gemma-2-9b-it:free',              // different provider as last resort
+  'openrouter/auto',
+  'meta-llama/llama-3-8b-instruct:free',
+  'mistralai/mistral-7b-instruct:free',
 ];
 
 const MYMEMORY_URL = 'https://api.mymemory.translated.net/get';
@@ -329,7 +329,7 @@ async function fetchArticleText(articleUrl) {
   }
 
   // Keep it tight — Llama 3.2 3B has a limited context
-  return paragraphs.join('\n\n').slice(0, 2500);
+  return paragraphs.join('\n\n').slice(0, 1500);
 }
 
 // -----------------------------------------------------------
@@ -358,7 +358,7 @@ async function callOpenRouter(model, messages) {
       messages,
       temperature: 0.3,
       top_p: 0.9,
-      max_tokens: 400,
+      max_tokens: 150,
     }),
   }, 30_000);
 
