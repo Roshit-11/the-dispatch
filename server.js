@@ -42,12 +42,14 @@ const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
 // Fallback chain ordered by Devanagari quality and availability.
 // Using larger, more capable models first — they produce better Nepali output.
 // Free-tier models rotate in/out so we maintain 5 fallbacks to stay resilient.
+// Only verified-available free OpenRouter model IDs. Anything listed here
+// that returns 404 should be removed — a 404 means the model was delisted.
 const OPENROUTER_MODELS = [
   'meta-llama/llama-3.3-70b-instruct:free',   // best free multilingual, great Nepali
   'google/gemma-3-27b-it:free',                // strong Devanagari support
-  'deepseek/deepseek-chat-v3-0324:free',       // very capable, good multilingual
-  'qwen/qwen3-8b:free',                        // lightweight fallback, good Nepali
-  'mistralai/mistral-7b-instruct:free',        // last-resort fallback
+  'google/gemma-2-9b-it:free',                 // lighter Gemma, different quota pool
+  'meta-llama/llama-3.1-8b-instruct:free',     // reliable lighter Llama, different pool
+  'mistralai/mistral-nemo:free',               // 12B, multilingual, good fallback
 ];
 
 const MYMEMORY_URL = 'https://api.mymemory.translated.net/get';
@@ -413,12 +415,10 @@ ${articleText}
     { role: 'user',   content: userMsg },
   ];
 
-  // Walk the fallback chain. Different strategies for different error types:
-  //   - Rate limit  → try next model immediately (maybe it's a different provider)
-  //   - Other error → try next model too, but log it
-  // Only throw if ALL models failed.
+  // Walk the fallback chain. If ALL models fail — whether rate-limited (429) or
+  // delisted (404) — abort the whole cycle. Retrying per-article just pounds
+  // the rate-limited top models and wastes the quota we're trying to preserve.
   let lastError = null;
-  let allRateLimited = true;
 
   for (const model of OPENROUTER_MODELS) {
     try {
@@ -426,19 +426,13 @@ ${articleText}
       return result;
     } catch (err) {
       lastError = err;
-      if (!(err instanceof RateLimitedError)) {
-        allRateLimited = false;
-      }
       console.warn(`[llama] ${err.message.slice(0, 150)} — trying next model…`);
     }
   }
 
-  // All models failed. Preserve the rate-limited-ness of the error so the
-  // cycle knows whether to abort or just skip this article.
-  if (allRateLimited) {
-    throw new RateLimitedError(`All models rate-limited. Last: ${lastError?.message?.slice(0, 200)}`);
-  }
-  throw new Error(`All models failed. Last: ${lastError?.message?.slice(0, 200)}`);
+  // Every fallback exhausted. Signal abort-cycle via RateLimitedError so the
+  // scrape loop stops instead of trying the next article.
+  throw new RateLimitedError(`All models unavailable. Last: ${lastError?.message?.slice(0, 200)}`);
 }
 
 // -----------------------------------------------------------
