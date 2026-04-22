@@ -35,21 +35,13 @@ const SCRAPE_INTERVAL_MIN = Math.max(5, Number(process.env.SCRAPE_INTERVAL_MINUT
 const ARTICLE_HOST = 'article-extractor-and-summarizer.p.rapidapi.com';
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
-// Fallback chain for summarization. OpenRouter free models go in and out of
-// availability constantly — having multiple fallbacks means we don't fail
-// a whole cycle when one provider is rate-limited or delisted.
-//
-// Fallback chain ordered by Devanagari quality and availability.
-// Using larger, more capable models first — they produce better Nepali output.
-// Free-tier models rotate in/out so we maintain 5 fallbacks to stay resilient.
-// Only verified-available free OpenRouter model IDs. Anything listed here
-// that returns 404 should be removed — a 404 means the model was delisted.
+// Known-working free-tier chain. `openrouter/auto` picks whatever free model
+// is currently available, and the two specific models are long-standing
+// fallbacks that rarely 404.
 const OPENROUTER_MODELS = [
-  'meta-llama/llama-3.3-70b-instruct:free',   // best free multilingual, great Nepali
-  'google/gemma-3-27b-it:free',                // strong Devanagari support
-  'google/gemma-2-9b-it:free',                 // lighter Gemma, different quota pool
-  'meta-llama/llama-3.1-8b-instruct:free',     // reliable lighter Llama, different pool
-  'mistralai/mistral-nemo:free',               // 12B, multilingual, good fallback
+  'openrouter/auto',
+  'meta-llama/llama-3-8b-instruct:free',
+  'mistralai/mistral-7b-instruct:free',
 ];
 
 const MYMEMORY_URL = 'https://api.mymemory.translated.net/get';
