@@ -27,7 +27,27 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // -----------------------------------------------------------
 const PORT = Number(process.env.PORT || 3000);
 const RAPIDAPI_KEY = process.env.RAPIDAPI_KEY || '';
-const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY || '';
+// Primary + optional backup OpenRouter keys. When one key's daily quota is
+// exhausted, we transparently retry with the next. Auto-detects any env var
+// named OPENROUTER_API_KEY, OPENROUTER_API_KEY_2, OPENROUTER_API_KEY_3, …
+// Add as many as you want — no code change needed.
+const OPENROUTER_API_KEYS = (() => {
+  const keys = [];
+  if (process.env.OPENROUTER_API_KEY) keys.push(process.env.OPENROUTER_API_KEY);
+  const numbered = Object.keys(process.env)
+    .filter(k => /^OPENROUTER_API_KEY_\d+$/.test(k))
+    .sort((a, b) => {
+      const na = Number(a.split('_').pop());
+      const nb = Number(b.split('_').pop());
+      return na - nb;
+    });
+  for (const name of numbered) {
+    const val = process.env[name];
+    if (val && !keys.includes(val)) keys.push(val);
+  }
+  return keys;
+})();
+const OPENROUTER_API_KEY = OPENROUTER_API_KEYS[0] || ''; // back-compat
 const MYMEMORY_EMAIL = process.env.MYMEMORY_EMAIL || '';
 const ADMIN_TOKEN = process.env.ADMIN_TOKEN || '';
 const SCRAPE_INTERVAL_MIN = Math.max(5, Number(process.env.SCRAPE_INTERVAL_MINUTES || 30));
@@ -338,11 +358,11 @@ class RateLimitedError extends Error {
   constructor(message) { super(message); this.name = 'RateLimitedError'; }
 }
 
-async function callOpenRouter(model, messages) {
+async function callOpenRouter(model, messages, apiKey = OPENROUTER_API_KEY) {
   const res = await fetchWithTimeout(OPENROUTER_URL, {
     method: 'POST',
     headers: {
-      'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
+      'Authorization': `Bearer ${apiKey}`,
       'Content-Type': 'application/json',
       // Optional but recommended — identifies the app in OpenRouter dashboards.
       'HTTP-Referer': 'http://localhost:3000',
@@ -387,7 +407,7 @@ async function callOpenRouter(model, messages) {
 }
 
 async function summarizeWithLlama(articleText, title) {
-  if (!OPENROUTER_API_KEY) {
+  if (OPENROUTER_API_KEYS.length === 0) {
     throw new Error('OPENROUTER_API_KEY not configured in .env');
   }
 
@@ -407,24 +427,26 @@ ${articleText}
     { role: 'user',   content: userMsg },
   ];
 
-  // Walk the fallback chain. If ALL models fail — whether rate-limited (429) or
-  // delisted (404) — abort the whole cycle. Retrying per-article just pounds
-  // the rate-limited top models and wastes the quota we're trying to preserve.
+  // Walk keys × models. For each API key, try the full fallback chain. This
+  // way when key #1 exhausts its daily quota, we transparently move to key #2.
+  // Abort cycle only when every (key, model) pair has failed.
   let lastError = null;
 
-  for (const model of OPENROUTER_MODELS) {
-    try {
-      const result = await callOpenRouter(model, messages);
-      return result;
-    } catch (err) {
-      lastError = err;
-      console.warn(`[llama] ${err.message.slice(0, 150)} — trying next model…`);
+  for (let keyIdx = 0; keyIdx < OPENROUTER_API_KEYS.length; keyIdx++) {
+    const apiKey = OPENROUTER_API_KEYS[keyIdx];
+    const keyLabel = `key#${keyIdx + 1}`;
+    for (const model of OPENROUTER_MODELS) {
+      try {
+        return await callOpenRouter(model, messages, apiKey);
+      } catch (err) {
+        lastError = err;
+        console.warn(`[llama ${keyLabel}] ${err.message.slice(0, 140)} — trying next…`);
+      }
     }
   }
 
-  // Every fallback exhausted. Signal abort-cycle via RateLimitedError so the
-  // scrape loop stops instead of trying the next article.
-  throw new RateLimitedError(`All models unavailable. Last: ${lastError?.message?.slice(0, 200)}`);
+  // Every key × every model exhausted. Signal abort-cycle.
+  throw new RateLimitedError(`All keys/models unavailable. Last: ${lastError?.message?.slice(0, 200)}`);
 }
 
 // -----------------------------------------------------------
@@ -653,11 +675,11 @@ async function main() {
   } else {
     console.log('✓ RapidAPI key loaded');
   }
-  if (!OPENROUTER_API_KEY) {
+  if (OPENROUTER_API_KEYS.length === 0) {
     console.warn('⚠️  OPENROUTER_API_KEY is not set in .env — Nepali aggregator will not work.');
     console.warn('    Get a free key at https://openrouter.ai/settings/keys\n');
   } else {
-    console.log('✓ OpenRouter key loaded');
+    console.log(`✓ OpenRouter keys loaded (${OPENROUTER_API_KEYS.length})`);
   }
   if (MYMEMORY_EMAIL) {
     console.log(`✓ MyMemory email: ${MYMEMORY_EMAIL}`);
