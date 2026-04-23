@@ -59,14 +59,19 @@ const SCRAPE_INTERVAL_MIN = Math.max(5, Number(process.env.SCRAPE_INTERVAL_MINUT
 const ARTICLE_HOST = 'article-extractor-and-summarizer.p.rapidapi.com';
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
-// xAI (Grok) — primary provider. OpenAI-compatible /chat/completions.
-const XAI_API_KEY = process.env.XAI_API_KEY || '';
-const XAI_URL = 'https://api.x.ai/v1/chat/completions';
-const XAI_MODELS = [
-  'grok-4-fast-reasoning',
-  'grok-4-fast-non-reasoning',
-  'grok-3-mini',
-  'grok-2-latest',
+// Google Gemini — primary provider. Uses the OpenAI-compatible endpoint so
+// we can reuse the same message format as OpenRouter.
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
+const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions';
+// Ordered by free-tier daily quota on aistudio.google.com:
+//   gemma-3-27b-it   → 14,400/day, 30 RPM (primary workhorse, very capable)
+//   gemma-3-12b-it   → 14,400/day, 30 RPM (fallback if 27b is down)
+//   gemini-2.5-flash → 20/day, 5 RPM     (high quality but tiny cap — last)
+const GEMINI_MODELS = [
+  'gemma-3-27b-it',
+  'gemma-3-12b-it',
+  'gemma-3-4b-it',
+  'gemini-2.5-flash',
 ];
 
 // OpenRouter's :free roster changes frequently — any single model can 404
@@ -491,16 +496,12 @@ function buildPollinationsImageUrl(title, summary) {
   return pollinationsUrlFromPrompt(prompt);
 }
 
-// Async version — translates the Nepali title to English first so Flux
-// understands the subject, then adds a topic-aware style suffix.
+// Async alias — kept for the scrape pipeline. Now identical to the sync
+// version (no more MyMemory hop): topic detection alone produces cleaner
+// English prompts than translated Nepali, and removes one external API call
+// per article.
 async function buildPollinationsImageUrlAsync(title, summary) {
-  const base = (title && title.length >= 10) ? title : (summary || title || '').slice(0, 200);
-  if (!base) return null;
-  const topic = detectTopicEn(title, summary);
-  const en = await translateNpToEn(base.slice(0, 200));
-  const subject = (en || base).replace(/\s+/g, ' ').trim().slice(0, 180);
-  const prompt = `${subject}. ${topic}. documentary news photograph, photojournalism, cinematic natural light, realistic, high detail, no text, no watermark, no logo`;
-  return pollinationsUrlFromPrompt(prompt);
+  return buildPollinationsImageUrl(title, summary);
 }
 
 // -----------------------------------------------------------
@@ -571,7 +572,7 @@ async function callOpenRouter(model, messages, apiKey = OPENROUTER_API_KEY) {
 }
 
 async function summarizeWithLlama(articleText, title) {
-  if (!XAI_API_KEY && OPENROUTER_API_KEYS.length === 0) {
+  if (!GEMINI_API_KEY && OPENROUTER_API_KEYS.length === 0) {
     throw new Error('No summarizer key set — configure XAI_API_KEY or OPENROUTER_API_KEY');
   }
 
@@ -594,14 +595,14 @@ ${articleText}
   return await runSummarizerChain(messages);
 }
 
-// Try xAI first (primary), fall back to OpenRouter if xAI key is absent or
-// all xAI models fail. This is the single entry point every summarizer uses.
+// Gemini first (primary), fall back to OpenRouter if key is absent or all
+// Gemini models fail. Single entry point every summarizer uses.
 async function runSummarizerChain(messages) {
-  if (XAI_API_KEY) {
+  if (GEMINI_API_KEY) {
     try {
-      return await runXAIChain(messages);
+      return await runGeminiChain(messages);
     } catch (err) {
-      console.warn(`[summarize] xAI failed (${err.message?.slice(0, 140)}) — falling back to OpenRouter`);
+      console.warn(`[summarize] Gemini failed (${err.message?.slice(0, 140)}) — falling back to OpenRouter`);
     }
   }
   return await runOpenRouterChain(messages);
@@ -611,7 +612,7 @@ async function runSummarizerChain(messages) {
 // when RapidAPI fails. Accepts target language and sentence count so the
 // frontend's language/length selectors still work.
 async function summarizeGeneric(articleText, title, lang = 'en', sentenceCount = 3) {
-  if (!XAI_API_KEY && OPENROUTER_API_KEYS.length === 0) {
+  if (!GEMINI_API_KEY && OPENROUTER_API_KEYS.length === 0) {
     throw new Error('No summarizer key set');
   }
   const langName = ({
@@ -631,11 +632,11 @@ async function summarizeGeneric(articleText, title, lang = 'en', sentenceCount =
 // on every scrape cycle. Cleared whenever refreshOpenRouterModels runs.
 const DEAD_MODELS = new Set();
 
-async function callXAI(model, messages) {
-  const res = await fetchWithTimeout(XAI_URL, {
+async function callGemini(model, messages) {
+  const res = await fetchWithTimeout(GEMINI_URL, {
     method: 'POST',
     headers: {
-      'Authorization': `Bearer ${XAI_API_KEY}`,
+      'Authorization': `Bearer ${GEMINI_API_KEY}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
@@ -649,42 +650,42 @@ async function callXAI(model, messages) {
 
   if (!res.ok) {
     const errBody = (await res.text()).slice(0, 200);
-    if (res.status === 429) throw new RateLimitedError(`[xai ${model}] rate-limited: ${errBody}`);
-    throw new Error(`[xai ${model}] HTTP ${res.status}: ${errBody}`);
+    if (res.status === 429) throw new RateLimitedError(`[gemini ${model}] rate-limited: ${errBody}`);
+    throw new Error(`[gemini ${model}] HTTP ${res.status}: ${errBody}`);
   }
   const data = await res.json();
   if (data.error) {
     const msg = typeof data.error === 'string' ? data.error : JSON.stringify(data.error);
-    throw new Error(`[xai ${model}] error: ${msg.slice(0, 200)}`);
+    throw new Error(`[gemini ${model}] error: ${msg.slice(0, 200)}`);
   }
   const msgObj = data?.choices?.[0]?.message || {};
   let text = msgObj.content || msgObj.reasoning_content || msgObj.reasoning || '';
   if (typeof text === 'string') text = text.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
-  if (!text) throw new Error(`[xai ${model}] returned no content`);
+  if (!text) throw new Error(`[gemini ${model}] returned no content`);
   return text.trim();
 }
 
-async function runXAIChain(messages) {
-  if (!XAI_API_KEY) throw new Error('XAI_API_KEY not set');
+async function runGeminiChain(messages) {
+  if (!GEMINI_API_KEY) throw new Error('GEMINI_API_KEY not set');
   let lastError = null;
-  for (const model of XAI_MODELS) {
-    if (DEAD_MODELS.has(`xai:${model}`)) continue;
+  for (const model of GEMINI_MODELS) {
+    if (DEAD_MODELS.has(`gemini:${model}`)) continue;
     try {
-      const result = await callXAI(model, messages);
-      console.log(`[xai] ✓ success via ${model}`);
+      const result = await callGemini(model, messages);
+      console.log(`[gemini] ✓ success via ${model}`);
       return result;
     } catch (err) {
       lastError = err;
       const msg = err.message || '';
-      if (/HTTP 404|does not exist|invalid model/i.test(msg)) {
-        DEAD_MODELS.add(`xai:${model}`);
-        console.warn(`[xai] ${model}: 404/invalid — marking dead`);
+      if (/HTTP 404|not found|invalid model/i.test(msg)) {
+        DEAD_MODELS.add(`gemini:${model}`);
+        console.warn(`[gemini] ${model}: 404/invalid — marking dead`);
         continue;
       }
-      console.warn(`[xai] ${model}: ${msg.slice(0, 140)} — trying next…`);
+      console.warn(`[gemini] ${model}: ${msg.slice(0, 140)} — trying next…`);
     }
   }
-  throw lastError || new Error('all xai models failed');
+  throw lastError || new Error('all gemini models failed');
 }
 
 async function runOpenRouterChain(messages) {
@@ -1008,8 +1009,8 @@ async function main() {
     console.warn('    Get a free key at https://openrouter.ai/settings/keys\n');
   } else {
     console.log(`✓ OpenRouter keys loaded (${OPENROUTER_API_KEYS.length})`);
-  if (XAI_API_KEY) console.log(`✓ xAI (Grok) configured as primary summarizer`);
-  else console.log(`! XAI_API_KEY not set — OpenRouter will be used directly`);
+  if (GEMINI_API_KEY) console.log(`✓ Gemini configured as primary summarizer`);
+  else console.log(`! GEMINI_API_KEY not set — OpenRouter will be used directly`);
   }
   if (MYMEMORY_EMAIL) {
     console.log(`✓ MyMemory email: ${MYMEMORY_EMAIL}`);
