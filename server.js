@@ -59,13 +59,18 @@ const SCRAPE_INTERVAL_MIN = Math.max(5, Number(process.env.SCRAPE_INTERVAL_MINUT
 const ARTICLE_HOST = 'article-extractor-and-summarizer.p.rapidapi.com';
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
-// Known-working free-tier chain. `openrouter/auto` picks whatever free model
-// is currently available, and the two specific models are long-standing
-// fallbacks that rarely 404.
+// OpenRouter's :free roster changes frequently — any single model can 404
+// without notice. We maintain a broader list so the chain has several real
+// chances before giving up. `openrouter/auto` is intentionally excluded
+// because it falls back to PAID models (→ HTTP 402) when free ones are down.
 const OPENROUTER_MODELS = [
-  'openrouter/auto',
-  'meta-llama/llama-3-8b-instruct:free',
-  'mistralai/mistral-7b-instruct:free',
+  'meta-llama/llama-3.3-70b-instruct:free',
+  'google/gemma-3-27b-it:free',
+  'deepseek/deepseek-r1:free',
+  'qwen/qwen-2.5-72b-instruct:free',
+  'nvidia/llama-3.1-nemotron-70b-instruct:free',
+  'meta-llama/llama-3.2-3b-instruct:free',
+  'meta-llama/llama-3.2-1b-instruct:free',
 ];
 
 const MYMEMORY_URL = 'https://api.mymemory.translated.net/get';
@@ -383,16 +388,18 @@ async function fetchArticleText(articleUrl) {
 // the URL — no server-side API call, no key, no quota. Best-effort: if
 // Pollinations is down the browser shows the placeholder.
 function buildPollinationsImageUrl(title, summary) {
-  const base = (title && title.length >= 20) ? title : (summary || title || '').slice(0, 180);
+  const base = (title && title.length >= 20) ? title : (summary || title || '').slice(0, 150);
   if (!base) return null;
-  const prompt = `${base} — photorealistic editorial news photograph, neutral lighting, documentary style`;
+  // Keep prompt short — Pollinations queue is faster on shorter inputs.
+  const prompt = `${base.slice(0, 200)}, news photo, editorial`;
   const params = new URLSearchParams({
-    width: '1024',
-    height: '576',
+    width: '768',    // smaller → faster generation on free queue
+    height: '432',   // 16:9
     nologo: 'true',
+    model: 'flux',   // fastest free model on Pollinations
     // Deterministic seed per-prompt so the same article always gets the same
     // image (cached by Pollinations, faster load on repeat visits).
-    seed: String(hashUrl(prompt) >>> 0).slice(0, 6),
+    seed: String((hashUrl(prompt) >>> 0) % 999999),
   });
   return `${POLLINATIONS_BASE}${encodeURIComponent(prompt)}?${params.toString()}`;
 }
