@@ -633,6 +633,20 @@ async function summarizeGeneric(articleText, title, lang = 'en', sentenceCount =
 const DEAD_MODELS = new Set();
 
 async function callGemini(model, messages) {
+  // Gemma models don't support "system" role on the OpenAI-compat endpoint
+  // ("Developer instruction is not enabled"). Fold any system messages into
+  // the first user message.
+  let outboundMessages = messages;
+  if (/^gemma/i.test(model)) {
+    const systemText = messages.filter(m => m.role === 'system').map(m => m.content).join('\n\n');
+    const nonSystem = messages.filter(m => m.role !== 'system');
+    outboundMessages = nonSystem.map((m, i) =>
+      (i === 0 && m.role === 'user' && systemText)
+        ? { role: 'user', content: `${systemText}\n\n${m.content}` }
+        : m
+    );
+  }
+
   const res = await fetchWithTimeout(GEMINI_URL, {
     method: 'POST',
     headers: {
@@ -641,7 +655,7 @@ async function callGemini(model, messages) {
     },
     body: JSON.stringify({
       model,
-      messages,
+      messages: outboundMessages,
       temperature: 0.3,
       top_p: 0.9,
       max_tokens: 200,
@@ -677,9 +691,9 @@ async function runGeminiChain(messages) {
     } catch (err) {
       lastError = err;
       const msg = err.message || '';
-      if (/HTTP 404|not found|invalid model/i.test(msg)) {
+      if (/HTTP 404|HTTP 400|not found|invalid model|not enabled|not supported/i.test(msg)) {
         DEAD_MODELS.add(`gemini:${model}`);
-        console.warn(`[gemini] ${model}: 404/invalid — marking dead`);
+        console.warn(`[gemini] ${model}: permanent error — marking dead`);
         continue;
       }
       console.warn(`[gemini] ${model}: ${msg.slice(0, 140)} — trying next…`);
