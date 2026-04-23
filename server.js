@@ -513,15 +513,21 @@ async function runOpenRouterChain(messages) {
   // Abort cycle only when every (key, model) pair has failed.
   let lastError = null;
 
-  for (let keyIdx = 0; keyIdx < OPENROUTER_API_KEYS.length; keyIdx++) {
-    const apiKey = OPENROUTER_API_KEYS[keyIdx];
-    const keyLabel = `key#${keyIdx + 1}`;
-    for (const model of OPENROUTER_MODELS) {
+  // Column-major: try model[0] across all keys first, then model[1] across all
+  // keys, etc. This way the primary model is exhausted on every key before we
+  // degrade to a weaker model.
+  for (let modelIdx = 0; modelIdx < OPENROUTER_MODELS.length; modelIdx++) {
+    const model = OPENROUTER_MODELS[modelIdx];
+    for (let keyIdx = 0; keyIdx < OPENROUTER_API_KEYS.length; keyIdx++) {
+      const apiKey = OPENROUTER_API_KEYS[keyIdx];
+      const keyLabel = `key#${keyIdx + 1}`;
       try {
-        return await callOpenRouter(model, messages, apiKey);
+        const result = await callOpenRouter(model, messages, apiKey);
+        console.log(`[llama ${keyLabel}] ✓ success via ${model}`);
+        return result;
       } catch (err) {
         lastError = err;
-        console.warn(`[llama ${keyLabel}] ${err.message.slice(0, 140)} — trying next…`);
+        console.warn(`[llama ${keyLabel}] ${model}: ${err.message.slice(0, 120)} — trying next…`);
       }
     }
   }
