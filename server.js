@@ -646,6 +646,17 @@ app.get('/api/health', (req, res) => {
 app.get('/api/news', async (req, res) => {
   try {
     const feed = await loadFeed();
+    // Retroactively fill missing cover images for older articles saved before
+    // the Pollinations fallback was added. Pure URL construction, no cost.
+    for (const art of feed) {
+      if (!art.imageUrl) {
+        const generated = buildPollinationsImageUrl(art.title, art.summary);
+        if (generated) {
+          art.imageUrl = generated;
+          art.imageGenerated = true;
+        }
+      }
+    }
     const bySource = {};
     for (const art of feed) {
       if (!bySource[art.source]) bySource[art.source] = [];
