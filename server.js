@@ -59,6 +59,16 @@ const SCRAPE_INTERVAL_MIN = Math.max(5, Number(process.env.SCRAPE_INTERVAL_MINUT
 const ARTICLE_HOST = 'article-extractor-and-summarizer.p.rapidapi.com';
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
+// xAI (Grok) — primary provider. OpenAI-compatible /chat/completions.
+const XAI_API_KEY = process.env.XAI_API_KEY || '';
+const XAI_URL = 'https://api.x.ai/v1/chat/completions';
+const XAI_MODELS = [
+  'grok-4-fast-reasoning',
+  'grok-4-fast-non-reasoning',
+  'grok-3-mini',
+  'grok-2-latest',
+];
+
 // OpenRouter's :free roster changes frequently — any single model can 404
 // without notice. Instead of hardcoding stale IDs, fetch the live list from
 // /api/v1/models at startup (and refresh periodically) and filter to `:free`.
@@ -547,14 +557,22 @@ async function callOpenRouter(model, messages, apiKey = OPENROUTER_API_KEY) {
     throw new Error(`[${model}] error in body: ${errMsg.slice(0, 200)}`);
   }
 
-  const text = data?.choices?.[0]?.message?.content;
+  // Reasoning models (glm-4.5-air, nemotron-nano, deepseek-r1, etc.) often
+  // return the final answer in `reasoning` or `reasoning_content`, leaving
+  // `content` empty. Also strip <think>…</think> blocks that sometimes leak
+  // into content.
+  const msg = data?.choices?.[0]?.message || {};
+  let text = msg.content || msg.reasoning_content || msg.reasoning || '';
+  if (typeof text === 'string') {
+    text = text.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+  }
   if (!text) throw new Error(`[${model}] returned no content`);
   return text.trim();
 }
 
 async function summarizeWithLlama(articleText, title) {
-  if (OPENROUTER_API_KEYS.length === 0) {
-    throw new Error('OPENROUTER_API_KEY not configured in .env');
+  if (!XAI_API_KEY && OPENROUTER_API_KEYS.length === 0) {
+    throw new Error('No summarizer key set — configure XAI_API_KEY or OPENROUTER_API_KEY');
   }
 
   const systemMsg = `You are a professional Nepali news editor. You ALWAYS write in Nepali (Devanagari script). You summarize articles concisely and factually in exactly 3 short sentences. You never respond in English. You never add preamble like "Here is the summary" — you output only the summary itself.`;
@@ -573,6 +591,19 @@ ${articleText}
     { role: 'user',   content: userMsg },
   ];
 
+  return await runSummarizerChain(messages);
+}
+
+// Try xAI first (primary), fall back to OpenRouter if xAI key is absent or
+// all xAI models fail. This is the single entry point every summarizer uses.
+async function runSummarizerChain(messages) {
+  if (XAI_API_KEY) {
+    try {
+      return await runXAIChain(messages);
+    } catch (err) {
+      console.warn(`[summarize] xAI failed (${err.message?.slice(0, 140)}) — falling back to OpenRouter`);
+    }
+  }
   return await runOpenRouterChain(messages);
 }
 
@@ -580,8 +611,8 @@ ${articleText}
 // when RapidAPI fails. Accepts target language and sentence count so the
 // frontend's language/length selectors still work.
 async function summarizeGeneric(articleText, title, lang = 'en', sentenceCount = 3) {
-  if (OPENROUTER_API_KEYS.length === 0) {
-    throw new Error('OPENROUTER_API_KEY not configured');
+  if (!XAI_API_KEY && OPENROUTER_API_KEYS.length === 0) {
+    throw new Error('No summarizer key set');
   }
   const langName = ({
     en: 'English', ne: 'Nepali', hi: 'Hindi', bn: 'Bengali', ta: 'Tamil',
@@ -590,26 +621,85 @@ async function summarizeGeneric(articleText, title, lang = 'en', sentenceCount =
   })[lang] || lang;
   const systemMsg = `You are a professional news editor. Summarize the given article factually in exactly ${sentenceCount} short sentence(s) in ${langName}. Output only the summary — no preamble, no labels, no quotes.`;
   const userMsg = `Title: ${title || '(untitled)'}\n\nArticle:\n${articleText}\n\nSummary in ${langName} (${sentenceCount} sentence${sentenceCount > 1 ? 's' : ''}):`;
-  return await runOpenRouterChain([
+  return await runSummarizerChain([
     { role: 'system', content: systemMsg },
     { role: 'user',   content: userMsg },
   ]);
 }
 
+// Models that returned 404 recently — skip them to avoid wasting 4 calls
+// on every scrape cycle. Cleared whenever refreshOpenRouterModels runs.
+const DEAD_MODELS = new Set();
+
+async function callXAI(model, messages) {
+  const res = await fetchWithTimeout(XAI_URL, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${XAI_API_KEY}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model,
+      messages,
+      temperature: 0.3,
+      top_p: 0.9,
+      max_tokens: 200,
+    }),
+  }, 30_000);
+
+  if (!res.ok) {
+    const errBody = (await res.text()).slice(0, 200);
+    if (res.status === 429) throw new RateLimitedError(`[xai ${model}] rate-limited: ${errBody}`);
+    throw new Error(`[xai ${model}] HTTP ${res.status}: ${errBody}`);
+  }
+  const data = await res.json();
+  if (data.error) {
+    const msg = typeof data.error === 'string' ? data.error : JSON.stringify(data.error);
+    throw new Error(`[xai ${model}] error: ${msg.slice(0, 200)}`);
+  }
+  const msgObj = data?.choices?.[0]?.message || {};
+  let text = msgObj.content || msgObj.reasoning_content || msgObj.reasoning || '';
+  if (typeof text === 'string') text = text.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+  if (!text) throw new Error(`[xai ${model}] returned no content`);
+  return text.trim();
+}
+
+async function runXAIChain(messages) {
+  if (!XAI_API_KEY) throw new Error('XAI_API_KEY not set');
+  let lastError = null;
+  for (const model of XAI_MODELS) {
+    if (DEAD_MODELS.has(`xai:${model}`)) continue;
+    try {
+      const result = await callXAI(model, messages);
+      console.log(`[xai] ✓ success via ${model}`);
+      return result;
+    } catch (err) {
+      lastError = err;
+      const msg = err.message || '';
+      if (/HTTP 404|does not exist|invalid model/i.test(msg)) {
+        DEAD_MODELS.add(`xai:${model}`);
+        console.warn(`[xai] ${model}: 404/invalid — marking dead`);
+        continue;
+      }
+      console.warn(`[xai] ${model}: ${msg.slice(0, 140)} — trying next…`);
+    }
+  }
+  throw lastError || new Error('all xai models failed');
+}
+
 async function runOpenRouterChain(messages) {
   if (Date.now() - OPENROUTER_MODELS_LAST_REFRESH > OPENROUTER_MODELS_TTL_MS) {
     await refreshOpenRouterModels();
+    DEAD_MODELS.clear();
   }
-  // Walk keys × models. For each API key, try the full fallback chain. This
-  // way when key #1 exhausts its daily quota, we transparently move to key #2.
-  // Abort cycle only when every (key, model) pair has failed.
   let lastError = null;
 
-  // Column-major: try model[0] across all keys first, then model[1] across all
-  // keys, etc. This way the primary model is exhausted on every key before we
-  // degrade to a weaker model.
-  for (let modelIdx = 0; modelIdx < OPENROUTER_MODELS.length; modelIdx++) {
-    const model = OPENROUTER_MODELS[modelIdx];
+  const activeModels = OPENROUTER_MODELS.filter(m => !DEAD_MODELS.has(m));
+
+  // Column-major: try model[0] across all keys first, then model[1] across
+  // all keys, etc. This way the primary model is exhausted on every key
+  // before we degrade to a weaker model.
+  for (const model of activeModels) {
     for (let keyIdx = 0; keyIdx < OPENROUTER_API_KEYS.length; keyIdx++) {
       const apiKey = OPENROUTER_API_KEYS[keyIdx];
       const keyLabel = `key#${keyIdx + 1}`;
@@ -619,12 +709,24 @@ async function runOpenRouterChain(messages) {
         return result;
       } catch (err) {
         lastError = err;
-        console.warn(`[llama ${keyLabel}] ${model}: ${err.message.slice(0, 120)} — trying next…`);
+        const msg = err.message || '';
+        // 404 is key-independent — mark the model dead and stop looping keys.
+        if (/HTTP 404|No endpoints found/i.test(msg)) {
+          DEAD_MODELS.add(model);
+          console.warn(`[llama] ${model}: 404 — marking dead for this refresh window`);
+          break;
+        }
+        // "no content" is also usually key-independent (model output format
+        // issue) — skip remaining keys for this model.
+        if (/returned no content/i.test(msg)) {
+          console.warn(`[llama] ${model}: empty output — skipping remaining keys`);
+          break;
+        }
+        console.warn(`[llama ${keyLabel}] ${model}: ${msg.slice(0, 120)} — trying next…`);
       }
     }
   }
 
-  // Every key × every model exhausted. Signal abort-cycle.
   throw new RateLimitedError(`All keys/models unavailable. Last: ${lastError?.message?.slice(0, 200)}`);
 }
 
@@ -906,6 +1008,8 @@ async function main() {
     console.warn('    Get a free key at https://openrouter.ai/settings/keys\n');
   } else {
     console.log(`✓ OpenRouter keys loaded (${OPENROUTER_API_KEYS.length})`);
+  if (XAI_API_KEY) console.log(`✓ xAI (Grok) configured as primary summarizer`);
+  else console.log(`! XAI_API_KEY not set — OpenRouter will be used directly`);
   }
   if (MYMEMORY_EMAIL) {
     console.log(`✓ MyMemory email: ${MYMEMORY_EMAIL}`);
