@@ -60,18 +60,52 @@ const ARTICLE_HOST = 'article-extractor-and-summarizer.p.rapidapi.com';
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
 // OpenRouter's :free roster changes frequently — any single model can 404
-// without notice. We maintain a broader list so the chain has several real
-// chances before giving up. `openrouter/auto` is intentionally excluded
-// because it falls back to PAID models (→ HTTP 402) when free ones are down.
-const OPENROUTER_MODELS = [
+// without notice. Instead of hardcoding stale IDs, fetch the live list from
+// /api/v1/models at startup (and refresh periodically) and filter to `:free`.
+// A hardcoded seed list is used as a fallback if the fetch fails.
+let OPENROUTER_MODELS = [
   'meta-llama/llama-3.3-70b-instruct:free',
-  'google/gemma-3-27b-it:free',
-  'deepseek/deepseek-r1:free',
-  'qwen/qwen-2.5-72b-instruct:free',
-  'nvidia/llama-3.1-nemotron-70b-instruct:free',
-  'meta-llama/llama-3.2-3b-instruct:free',
-  'meta-llama/llama-3.2-1b-instruct:free',
+  'google/gemini-2.0-flash-exp:free',
+  'deepseek/deepseek-chat-v3-0324:free',
+  'mistralai/mistral-small-3.2-24b-instruct:free',
+  'qwen/qwen3-coder:free',
+  'z-ai/glm-4.5-air:free',
+  'tngtech/deepseek-r1t-chimera:free',
+  'microsoft/mai-ds-r1:free',
 ];
+let OPENROUTER_MODELS_LAST_REFRESH = 0;
+const OPENROUTER_MODELS_TTL_MS = 30 * 60 * 1000;
+
+async function refreshOpenRouterModels() {
+  try {
+    const res = await fetchWithTimeout('https://openrouter.ai/api/v1/models', {
+      headers: OPENROUTER_API_KEY ? { Authorization: `Bearer ${OPENROUTER_API_KEY}` } : {},
+    }, 15000);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const json = await res.json();
+    const free = (json.data || [])
+      .filter(m => typeof m.id === 'string' && m.id.endsWith(':free'))
+      .map(m => m.id);
+    if (free.length > 0) {
+      // Prioritize larger/stronger models first by a rough heuristic.
+      const rank = (id) => {
+        const s = id.toLowerCase();
+        let score = 0;
+        if (/70b|72b|235b|mixtral|r1\b|v3|glm-4\.5|gemini-2/.test(s)) score += 100;
+        if (/27b|24b|chimera|mai-ds/.test(s)) score += 60;
+        if (/7b|8b|9b/.test(s)) score += 20;
+        if (/1b|3b/.test(s)) score += 5;
+        return -score;
+      };
+      free.sort((a, b) => rank(a) - rank(b));
+      OPENROUTER_MODELS = free;
+      OPENROUTER_MODELS_LAST_REFRESH = Date.now();
+      console.log(`[openrouter] refreshed free model list: ${free.length} models, top=${free[0]}`);
+    }
+  } catch (err) {
+    console.warn(`[openrouter] model list refresh failed: ${err.message} (using existing list of ${OPENROUTER_MODELS.length})`);
+  }
+}
 
 const MYMEMORY_URL = 'https://api.mymemory.translated.net/get';
 
@@ -383,25 +417,80 @@ async function fetchArticleText(articleUrl) {
 // -----------------------------------------------------------
 // Pollinations image generation (fallback cover image)
 // -----------------------------------------------------------
-// Builds a Pollinations URL from the article title (or summary fallback).
-// The image is rendered lazily by Pollinations when the browser requests
-// the URL — no server-side API call, no key, no quota. Best-effort: if
-// Pollinations is down the browser shows the placeholder.
-function buildPollinationsImageUrl(title, summary) {
-  const base = (title && title.length >= 20) ? title : (summary || title || '').slice(0, 150);
-  if (!base) return null;
-  // Keep prompt short — Pollinations queue is faster on shorter inputs.
-  const prompt = `${base.slice(0, 200)}, news photo, editorial`;
+// Detect a rough topic from the Nepali title so we can pick a better style
+// prompt than generic "news photo" (which yields corporate headshots).
+function detectTopicEn(title = '', summary = '') {
+  const t = `${title} ${summary}`;
+  const rules = [
+    { re: /राजनीति|संसद|प्रधानमन्त्री|मन्त्री|पार्टी|निर्वाचन|सरकार|कांग्रेस|एमाले|माओवादी/, en: 'parliament building, politics' },
+    { re: /क्रिकेट|cricket/i,                                                               en: 'cricket stadium, sports photography' },
+    { re: /फुटबल|football|soccer/i,                                                         en: 'football match, sports photography' },
+    { re: /खेल|खेलाडी|ओलम्पिक/,                                                              en: 'sports event, stadium' },
+    { re: /मौसम|वर्षा|हिमपात|बाढी|पहिरो/,                                                    en: 'weather landscape, sky, mountains' },
+    { re: /अर्थ|बजार|शेयर|बैंक|व्यापार|economy|market/i,                                      en: 'financial district, economy' },
+    { re: /स्वास्थ्य|अस्पताल|बिरामी|औषधी/,                                                    en: 'hospital, healthcare' },
+    { re: /शिक्षा|विद्यालय|विश्वविद्यालय|परीक्षा/,                                             en: 'classroom, education' },
+    { re: /प्रहरी|अपराध|हत्या|गिरफ्तार/,                                                     en: 'police, investigation scene' },
+    { re: /यातायात|सडक|दुर्घटना|बस|विमान/,                                                   en: 'road traffic, nepal street' },
+    { re: /पर्यटन|यात्रा|पर्वतारोहण|एभरेस्ट/,                                                  en: 'himalayas, nepal landscape' },
+    { re: /कृषि|किसान|खेती|अन्न/,                                                             en: 'terrace farming nepal, agriculture' },
+    { re: /प्रविधि|टेक्नोलोजी|मोबाइल|इन्टरनेट|AI/i,                                            en: 'technology, digital screens' },
+    { re: /मनोरञ्जन|फिल्म|संगीत|कलाकार/,                                                     en: 'concert stage, entertainment' },
+  ];
+  for (const r of rules) if (r.re.test(t)) return r.en;
+  return 'kathmandu nepal street scene';
+}
+
+// Translate short Nepali text to English via MyMemory (free, no key).
+// Falls back to the original string on any error.
+async function translateNpToEn(text) {
+  if (!text) return '';
+  try {
+    const u = new URL(MYMEMORY_URL);
+    u.searchParams.set('q', text.slice(0, 450));
+    u.searchParams.set('langpair', 'ne|en');
+    if (MYMEMORY_EMAIL) u.searchParams.set('de', MYMEMORY_EMAIL);
+    const res = await fetchWithTimeout(u.toString(), {}, 8000);
+    if (!res.ok) return text;
+    const j = await res.json();
+    const out = j?.responseData?.translatedText;
+    return (typeof out === 'string' && out.length > 0) ? out : text;
+  } catch {
+    return text;
+  }
+}
+
+function pollinationsUrlFromPrompt(prompt) {
   const params = new URLSearchParams({
-    width: '768',    // smaller → faster generation on free queue
-    height: '432',   // 16:9
+    width: '768',
+    height: '432',
     nologo: 'true',
-    model: 'flux',   // fastest free model on Pollinations
-    // Deterministic seed per-prompt so the same article always gets the same
-    // image (cached by Pollinations, faster load on repeat visits).
+    model: 'flux',
     seed: String((hashUrl(prompt) >>> 0) % 999999),
   });
   return `${POLLINATIONS_BASE}${encodeURIComponent(prompt)}?${params.toString()}`;
+}
+
+// Sync version — no translation. Used for retroactive fill of older articles
+// where we don't want to spend MyMemory quota on every /api/news request.
+function buildPollinationsImageUrl(title, summary) {
+  const base = (title && title.length >= 20) ? title : (summary || title || '').slice(0, 150);
+  if (!base) return null;
+  const topic = detectTopicEn(title, summary);
+  const prompt = `${topic}, documentary photograph, photojournalism, natural light, high detail, no text, no watermark`;
+  return pollinationsUrlFromPrompt(prompt);
+}
+
+// Async version — translates the Nepali title to English first so Flux
+// understands the subject, then adds a topic-aware style suffix.
+async function buildPollinationsImageUrlAsync(title, summary) {
+  const base = (title && title.length >= 10) ? title : (summary || title || '').slice(0, 200);
+  if (!base) return null;
+  const topic = detectTopicEn(title, summary);
+  const en = await translateNpToEn(base.slice(0, 200));
+  const subject = (en || base).replace(/\s+/g, ' ').trim().slice(0, 180);
+  const prompt = `${subject}. ${topic}. documentary news photograph, photojournalism, cinematic natural light, realistic, high detail, no text, no watermark, no logo`;
+  return pollinationsUrlFromPrompt(prompt);
 }
 
 // -----------------------------------------------------------
@@ -508,6 +597,9 @@ async function summarizeGeneric(articleText, title, lang = 'en', sentenceCount =
 }
 
 async function runOpenRouterChain(messages) {
+  if (Date.now() - OPENROUTER_MODELS_LAST_REFRESH > OPENROUTER_MODELS_TTL_MS) {
+    await refreshOpenRouterModels();
+  }
   // Walk keys × models. For each API key, try the full fallback chain. This
   // way when key #1 exhausts its daily quota, we transparently move to key #2.
   // Abort cycle only when every (key, model) pair has failed.
@@ -584,7 +676,7 @@ async function runScrapeCycle() {
             let imageUrl = art.imageUrl;
             let imageGenerated = false;
             if (!imageUrl) {
-              const generated = buildPollinationsImageUrl(art.title, summary);
+              const generated = await buildPollinationsImageUrlAsync(art.title, summary);
               if (generated) {
                 imageUrl = generated;
                 imageGenerated = true;
@@ -829,11 +921,15 @@ async function main() {
     console.log(`    Cycle every: ${SCRAPE_INTERVAL_MIN} minute(s)\n`);
   });
 
+  // Refresh the OpenRouter free-model list on boot so we don't hit 404s on
+  // stale IDs. Don't block startup on it.
+  refreshOpenRouterModels();
+
   // First scrape on boot (after a short delay so the server is responsive first),
   // then every SCRAPE_INTERVAL_MIN minutes.
   setTimeout(() => {
     runScrapeCycle().catch(err => console.error('[scrape] initial run failed:', err));
-  }, 2000);
+  }, 4000);
 
   setInterval(() => {
     runScrapeCycle().catch(err => console.error('[scrape] scheduled run failed:', err));
