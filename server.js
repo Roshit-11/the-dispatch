@@ -27,6 +27,10 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // -----------------------------------------------------------
 const PORT = Number(process.env.PORT || 3000);
 const RAPIDAPI_KEY = process.env.RAPIDAPI_KEY || '';
+// Pollinations generates images on demand from a URL — no API key, no quota,
+// no server-side call needed. We just build the URL; the browser fetches it
+// and Pollinations renders the image at request time.
+const POLLINATIONS_BASE = 'https://image.pollinations.ai/prompt/';
 // Primary + optional backup OpenRouter keys. When one key's daily quota is
 // exhausted, we transparently retry with the next. Auto-detects any env var
 // named OPENROUTER_API_KEY, OPENROUTER_API_KEY_2, OPENROUTER_API_KEY_3, …
@@ -372,6 +376,28 @@ async function fetchArticleText(articleUrl) {
 }
 
 // -----------------------------------------------------------
+// Pollinations image generation (fallback cover image)
+// -----------------------------------------------------------
+// Builds a Pollinations URL from the article title (or summary fallback).
+// The image is rendered lazily by Pollinations when the browser requests
+// the URL — no server-side API call, no key, no quota. Best-effort: if
+// Pollinations is down the browser shows the placeholder.
+function buildPollinationsImageUrl(title, summary) {
+  const base = (title && title.length >= 20) ? title : (summary || title || '').slice(0, 180);
+  if (!base) return null;
+  const prompt = `${base} — photorealistic editorial news photograph, neutral lighting, documentary style`;
+  const params = new URLSearchParams({
+    width: '1024',
+    height: '576',
+    nologo: 'true',
+    // Deterministic seed per-prompt so the same article always gets the same
+    // image (cached by Pollinations, faster load on repeat visits).
+    seed: String(hashUrl(prompt) >>> 0).slice(0, 6),
+  });
+  return `${POLLINATIONS_BASE}${encodeURIComponent(prompt)}?${params.toString()}`;
+}
+
+// -----------------------------------------------------------
 // OpenRouter summarization (free models, with fallback chain)
 // -----------------------------------------------------------
 
@@ -539,11 +565,25 @@ async function runScrapeCycle() {
 
             const summary = await summarizeWithLlama(articleText, art.title);
 
+            // If the article has no scraped image, generate one via Pollinations.
+            // This is just URL construction — the browser fetches the image lazily,
+            // so no server-side quota or latency cost here.
+            let imageUrl = art.imageUrl;
+            let imageGenerated = false;
+            if (!imageUrl) {
+              const generated = buildPollinationsImageUrl(art.title, summary);
+              if (generated) {
+                imageUrl = generated;
+                imageGenerated = true;
+              }
+            }
+
             newlyAdded.push({
               url: art.url,
               title: art.title,
               summary,
-              imageUrl: art.imageUrl,
+              imageUrl,
+              imageGenerated,
               source: source.id,
               sourceName: source.name,
               sourceNameNp: source.nameNp,
@@ -754,6 +794,7 @@ async function main() {
   if (MYMEMORY_EMAIL) {
     console.log(`✓ MyMemory email: ${MYMEMORY_EMAIL}`);
   }
+  console.log('✓ Pollinations image fallback enabled (no key required)');
 
   app.listen(PORT, () => {
     console.log(`\n📰  The Dispatch is running`);
