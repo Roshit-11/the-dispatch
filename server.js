@@ -320,7 +320,31 @@ async function discoverArticles(source) {
 }
 
 async function fetchArticleText(articleUrl) {
-  const res = await fetchWithTimeout(articleUrl);
+  // Send fully browser-like headers. Sites like Ekantipur 403 on server-side
+  // fetches that look stripped-down. A Referer from their own origin + a
+  // realistic Accept chain usually gets past the cheap bot checks.
+  let origin;
+  try { origin = new URL(articleUrl).origin; } catch { origin = ''; }
+  const browserHeaders = {
+    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+    'Accept-Language': 'ne-NP,ne;q=0.9,en-US;q=0.8,en;q=0.7',
+    'Accept-Encoding': 'gzip, deflate, br',
+    'Upgrade-Insecure-Requests': '1',
+    'Sec-Fetch-Dest': 'document',
+    'Sec-Fetch-Mode': 'navigate',
+    'Sec-Fetch-Site': 'same-origin',
+    'Sec-Fetch-User': '?1',
+    'Cache-Control': 'max-age=0',
+    ...(origin ? { 'Referer': origin + '/' } : {}),
+  };
+
+  let res = await fetchWithTimeout(articleUrl, { headers: browserHeaders });
+  // Retry once with Google as referer if the origin referer was rejected.
+  if (res.status === 403) {
+    res = await fetchWithTimeout(articleUrl, {
+      headers: { ...browserHeaders, 'Referer': 'https://www.google.com/' },
+    });
+  }
   if (!res.ok) throw new Error(`Article fetch failed: ${res.status}`);
   const html = await res.text();
 
@@ -427,6 +451,30 @@ ${articleText}
     { role: 'user',   content: userMsg },
   ];
 
+  return await runOpenRouterChain(messages);
+}
+
+// Generic OpenRouter summarizer used by the single-URL endpoint as a fallback
+// when RapidAPI fails. Accepts target language and sentence count so the
+// frontend's language/length selectors still work.
+async function summarizeGeneric(articleText, title, lang = 'en', sentenceCount = 3) {
+  if (OPENROUTER_API_KEYS.length === 0) {
+    throw new Error('OPENROUTER_API_KEY not configured');
+  }
+  const langName = ({
+    en: 'English', ne: 'Nepali', hi: 'Hindi', bn: 'Bengali', ta: 'Tamil',
+    ur: 'Urdu', ar: 'Arabic', es: 'Spanish', fr: 'French', de: 'German',
+    zh: 'Chinese', ja: 'Japanese', ru: 'Russian', pt: 'Portuguese',
+  })[lang] || lang;
+  const systemMsg = `You are a professional news editor. Summarize the given article factually in exactly ${sentenceCount} short sentence(s) in ${langName}. Output only the summary — no preamble, no labels, no quotes.`;
+  const userMsg = `Title: ${title || '(untitled)'}\n\nArticle:\n${articleText}\n\nSummary in ${langName} (${sentenceCount} sentence${sentenceCount > 1 ? 's' : ''}):`;
+  return await runOpenRouterChain([
+    { role: 'system', content: systemMsg },
+    { role: 'user',   content: userMsg },
+  ]);
+}
+
+async function runOpenRouterChain(messages) {
   // Walk keys × models. For each API key, try the full fallback chain. This
   // way when key #1 exhausts its daily quota, we transparently move to key #2.
   // Abort cycle only when every (key, model) pair has failed.
@@ -577,7 +625,9 @@ app.get('/api/news', async (req, res) => {
   }
 });
 
-// Single-article summarizer proxy
+// Single-article summarizer. Tries RapidAPI first for speed/quality; if that
+// fails (quota, 5xx, timeout, etc.) falls back to local scrape + OpenRouter
+// so the endpoint stays working as long as either service is up.
 app.get('/api/summarize', async (req, res) => {
   const { url, lang = 'en', engine = '2', length = '3' } = req.query;
   if (!url) return res.status(400).json({ error: 'Missing "url" parameter' });
@@ -588,29 +638,49 @@ app.get('/api/summarize', async (req, res) => {
     return res.status(400).json({ error: 'Invalid article URL' });
   }
 
-  if (!RAPIDAPI_KEY) {
-    return res.status(500).json({ error: 'RAPIDAPI_KEY not configured in .env' });
+  const sentenceCount = Math.max(1, Math.min(7, Number(length) || 3));
+
+  // --- Attempt 1: RapidAPI (if configured) ---
+  if (RAPIDAPI_KEY) {
+    const upstream = new URL(`https://${ARTICLE_HOST}/summarize`);
+    upstream.searchParams.set('url', url);
+    upstream.searchParams.set('lang', lang);
+    upstream.searchParams.set('engine', engine);
+    upstream.searchParams.set('length', length);
+
+    try {
+      const r = await fetchWithTimeout(upstream.toString(), {
+        headers: {
+          'x-rapidapi-host': ARTICLE_HOST,
+          'x-rapidapi-key': RAPIDAPI_KEY,
+        },
+      });
+      const body = await r.text();
+      // Success path — return as-is.
+      if (r.ok) {
+        return res.status(r.status)
+          .type(r.headers.get('content-type') || 'application/json')
+          .send(body);
+      }
+      console.warn(`[summarize] RapidAPI ${r.status}, falling back to OpenRouter`);
+    } catch (err) {
+      console.warn(`[summarize] RapidAPI error: ${err.message} — falling back to OpenRouter`);
+    }
   }
 
-  const upstream = new URL(`https://${ARTICLE_HOST}/summarize`);
-  upstream.searchParams.set('url', url);
-  upstream.searchParams.set('lang', lang);
-  upstream.searchParams.set('engine', engine);
-  upstream.searchParams.set('length', length);
-
+  // --- Attempt 2: Local fetch + OpenRouter fallback ---
   try {
-    const r = await fetchWithTimeout(upstream.toString(), {
-      headers: {
-        'x-rapidapi-host': ARTICLE_HOST,
-        'x-rapidapi-key': RAPIDAPI_KEY,
-      },
-    });
-    const body = await r.text();
-    res.status(r.status)
-      .type(r.headers.get('content-type') || 'application/json')
-      .send(body);
+    const articleText = await fetchArticleText(url);
+    if (!articleText || articleText.length < 200) {
+      return res.status(422).json({ error: 'Could not extract article text (may be paywalled, JS-rendered, or blocked).' });
+    }
+    // Best-effort title: pull <title> from article page. Cheap second fetch
+    // would be wasteful, so accept that title may be missing.
+    const summary = await summarizeGeneric(articleText, '', lang, sentenceCount);
+    return res.json({ summary, source: 'openrouter-fallback' });
   } catch (err) {
-    res.status(502).json({ error: `Upstream fetch failed: ${err.message}` });
+    const code = err?.name === 'RateLimitedError' ? 429 : 502;
+    return res.status(code).json({ error: `Summarization failed: ${err.message}` });
   }
 });
 
